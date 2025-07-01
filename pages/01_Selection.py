@@ -142,43 +142,6 @@ def main():
         if st.button("🔬 Access Research Dashboard", type="secondary", use_container_width=True):
             st.switch_page("pages/05_Dashboard.py")
     
-    # System capabilities overview
-    st.markdown("---")
-    st.markdown('<h2 class="section-header">📊 System Capabilities</h2>', unsafe_allow_html=True)
-    
-    # Metrics in a clean grid
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            label="Training Scenarios",
-            value="6",
-            help="Professional scenarios across military, medical, and emergency domains"
-        )
-    
-    with col2:
-        st.metric(
-            label="Bias Types",
-            value="3",
-            help="Confirmation bias, anchoring bias, and availability heuristic"
-        )
-    
-    with col3:
-        st.metric(
-            label="Assessment Dimensions", 
-            value="6",
-            help="Semantic similarity, originality, bias recognition, strategy, transfer, metacognition"
-        )
-    
-    with col4:
-        api_status = "Connected" if config.API_ENABLED else "Development"
-        api_color = "normal" if config.API_ENABLED else "off"
-        st.metric(
-            label="API Status",
-            value=api_status,
-            help="Claude API integration for AI assistance and automated testing"
-        )
-    
     # Footer information
     st.markdown("---")
     st.markdown("""

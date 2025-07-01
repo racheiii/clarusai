@@ -16,7 +16,7 @@ UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 ## File Structure
 ClarusAI/
 
-├── app.py                              # Streamlit main entry point & page routing
+├── Home.py                              # Streamlit main entry point & page routing
 
 ├── requirements.txt                    # Python dependencies (streamlit, anthropic, pandas, etc.)
 
@@ -78,7 +78,7 @@ ClarusAI/
 
 ├── pages/
 
-│   ├── 01_Home.py              # Research introduction, project overview, pathway selection
+│   ├── 01_Selection.py              # Research introduction, project overview, pathway selection
 
 │   ├── 02_Scenarios.py             # User training interface with scenario selection & AI assistance toggle
 
@@ -106,3 +106,12 @@ ClarusAI/
 - Real-time statistical validation
 - Algorithm transparency
 - Dissertation-ready outputs
+
+Core Reference Files (attach to all chats):
+
+config.py - Configuration settings and constants
+data/scenarios.csv - Your scenario database
+assets/styles/main.css - Styling reference
+requirements.txt - Dependencies context
+
+

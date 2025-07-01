@@ -25,8 +25,5 @@ source venv/bin/activate   # On Windows: .\venv\Scripts\activate
 pip install -r requirements.txt
 
 # Run the app
-streamlit run app.py
+streamlit run Home.py
 
-for me:
-source venv/bin/activate 
-streamlit run app.py

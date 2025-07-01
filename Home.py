@@ -54,33 +54,6 @@ def main():
         """)
         
         st.markdown("---")
-        
-        # Quick stats
-        st.markdown("### 📊 Quick Stats")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Scenarios", "6", help="Training scenarios available")
-            st.metric("Biases", "3", help="Cognitive biases targeted")
-        with col2:
-            st.metric("Domains", "3", help="Professional contexts")
-            st.metric("Dimensions", "6", help="Assessment criteria")
-        
-        # System status
-        st.markdown("---")
-        st.markdown("### ⚙️ System Status")
-        
-        if config.API_ENABLED:
-            st.success("🟢 API Connected")
-        else:
-            st.info("🟡 Development Mode")
-            
-        if config.ENABLE_RESEARCH_MODE:
-            st.success("🟢 Research Enabled")
-        else:
-            st.warning("🟡 Research Disabled")
-        
-        if config.DEBUG:
-            st.warning("🔧 Debug Mode Active")
     
     # Main page content - Clean and focused
     st.markdown('<h1 class="main-header">🧠 ClārusAI Research Platform</h1>', unsafe_allow_html=True)
