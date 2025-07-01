@@ -78,17 +78,15 @@ ClarusAI/
 
 ├── pages/
 
-│   ├── 01_Selection.py              # Research introduction, project overview, pathway selection
+│   ├── 01_Scenarios.py             # User training interface with scenario selection & AI assistance toggle
 
-│   ├── 02_Scenarios.py             # User training interface with scenario selection & AI assistance toggle
+│   ├── 02_Assessment.py           # Live 6-dimensional scoring demonstration & educational feedback
 
-│   ├── 03_Assessment.py           # Live 6-dimensional scoring demonstration & educational feedback
+│   ├── 03_Results.py              # Personal analytics, session summary, research contribution consent
 
-│   ├── 04_Results.py              # Personal analytics, session summary, research contribution consent
+│   ├── 04_Dashboard.py            # Research automation control centre & hypothesis testing
 
-│   ├── 05_Dashboard.py            # Research automation control centre & hypothesis testing
-
-│   └── 06_Methodology.py          # Algorithm transparency, validation metrics, reproducibility documentation
+│   └── 05_Methodology.py          # Algorithm transparency, validation metrics, reproducibility documentation
 
 │
 
