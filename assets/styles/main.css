@@ -1,0 +1,154 @@
+/* ClārusAI Main Styling*/
+
+/* Global Variables */
+:root {
+    --primary-blue: #1f77b4;
+    --secondary-blue: #aec7e8;
+    --accent-orange: #ff7f0e;
+    --success-green: #2ca02c;
+    --warning-red: #d62728;
+    --text-dark: #2c3e50;
+    --text-light: #7f8c8d;
+    --background-light: #f8f9fa;
+    --border-light: #e9ecef;
+    --shadow-light: rgba(0, 0, 0, 0.08);
+    --shadow-medium: rgba(0, 0, 0, 0.12);
+}
+
+/* Hide Streamlit branding */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+/* Streamlit container improvements */
+.main .block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    max-width: 1200px;
+}
+
+/* Main Content Styling */
+.main-header {
+    font-size: 2.5rem !important;
+    color: var(--primary-blue) !important;
+    text-align: center !important;
+    margin-bottom: 2rem !important;
+    font-weight: 600 !important;
+}
+
+.section-header {
+    font-size: 1.8rem !important;
+    color: var(--text-dark) !important;
+    border-bottom: 2px solid var(--primary-blue) !important;
+    padding-bottom: 0.5rem !important;
+    margin-bottom: 1.5rem !important;
+}
+
+/* Research Context Styling */
+.research-context {
+    background: linear-gradient(135deg, var(--background-light) 0%, #ffffff 100%) !important;
+    border-left: 4px solid var(--primary-blue) !important;
+    padding: 1.5rem !important;
+    margin: 1rem 0 !important;
+    border-radius: 0 8px 8px 0 !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+/* Metrics Cards */
+.metric-card {
+    background: #ffffff !important;
+    border: 1px solid var(--border-light) !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+    margin: 0.5rem 0 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
+    transition: transform 0.2s ease !important;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+
+/* Button Styling */
+.primary-button {
+    background: var(--primary-blue) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 6px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+.primary-button:hover {
+    background: #1565c0 !important;
+    transform: translateY(-1px) !important;
+}
+
+.secondary-button {
+    background: transparent !important;
+    color: var(--primary-blue) !important;
+    border: 2px solid var(--primary-blue) !important;
+    border-radius: 6px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+.secondary-button:hover {
+    background: var(--primary-blue) !important;
+    color: #ffffff !important;
+}
+
+/* Sidebar Enhancements */
+.sidebar-content {
+    background: var(--background-light) !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+    margin: 0.5rem 0 !important;
+}
+
+/* Status Indicators */
+.status-success {
+    color: var(--success-green) !important;
+    font-weight: 600 !important;
+}
+
+.status-warning {
+    color: var(--accent-orange) !important;
+    font-weight: 600 !important;
+}
+
+.status-error {
+    color: var(--warning-red) !important;
+    font-weight: 600 !important;
+}
+
+/* Typography */
+.academic-text {
+    font-family: 'Georgia', 'Times New Roman', serif !important;
+    line-height: 1.6 !important;
+    color: var(--text-dark) !important;
+}
+
+.code-text {
+    font-family: 'Monaco', 'Menlo', monospace !important;
+    background: var(--background-light) !important;
+    padding: 0.2rem 0.4rem !important;
+    border-radius: 4px !important;
+    font-size: 0.9rem !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .main-header {
+        font-size: 2rem !important;
+    }
+    
+    .section-header {
+        font-size: 1.5rem !important;
+    }
+}
