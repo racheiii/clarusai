@@ -15,32 +15,14 @@ def load_css():
             with open(css_path, "r", encoding="utf-8") as f:
                 st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
         else:
-            # Fallback minimal CSS if file not found
+            # Minimal fallback CSS only
             st.markdown("""
             <style>
-            :root {
-                --primary-blue: #1f77b4;
-                --secondary-blue: #aec7e8;
-                --accent-orange: #ff7f0e;
-                --success-green: #2ca02c;
-                --warning-red: #d62728;
-                --warning-yellow: #ffc107;
-                --text-dark: #2c3e50;
-                --text-light: #7f8c8d;
-                --background-white: #ffffff;
-                --background-light: #f8f9fa;
-                --border-light: #e9ecef;
-                --shadow-light: rgba(0, 0, 0, 0.08);
-                --shadow-medium: rgba(0, 0, 0, 0.12);
-            }
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
             header {visibility: hidden;}
             [data-testid="stHeader"] {display: none !important;}
-            .main .block-container {
-                padding-top: 2rem;
-                max-width: 1200px;
-            }
+            .main .block-container {padding-top: 2rem; max-width: 1200px;}
             </style>
             """, unsafe_allow_html=True)
     except Exception as e:
@@ -97,9 +79,9 @@ def render_navigation(current_page=None):
     with st.sidebar:
         # Logo/Header
         st.markdown("""
-        <div style="text-align: center; padding: 1rem; margin-bottom: 1rem;">
-            <h2 style="color: var(--primary-blue); margin: 0; font-size: 1.5rem;">🧠 ClārusAI</h2>
-            <p style="color: var(--text-light); margin: 0.5rem 0 0 0; font-size: 0.9rem;">AI Literacy Training</p>
+        <div class="nav-header">
+            <h2>🧠 ClārusAI</h2>
+            <p>AI Literacy Training</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -111,15 +93,7 @@ def render_navigation(current_page=None):
         dashboard_current = (current_page == 'dashboard')
         if dashboard_current:
             st.markdown("""
-            <div style="
-                background: var(--primary-blue);
-                color: white;
-                padding: 0.5rem 1rem;
-                border-radius: 6px;
-                margin: 0.25rem 0;
-                font-weight: 600;
-                text-align: center;
-            ">
+            <div class="nav-dashboard-active">
                 📊 Research Dashboard
             </div>
             """, unsafe_allow_html=True)
@@ -132,15 +106,7 @@ def render_navigation(current_page=None):
         
         # Project Info
         st.markdown("""
-        <div style="
-            background: var(--background-light);
-            border-left: 3px solid var(--primary-blue);
-            padding: 1rem;
-            margin: 1rem 0;
-            border-radius: 0 6px 6px 0;
-            font-size: 0.85rem;
-            color: var(--text-dark);
-        ">
+        <div class="nav-project-info">
             <strong>UCL Research Project</strong><br>
             Building AI Literacy Through Simulation<br>
             <em>Master's Dissertation</em>
@@ -151,74 +117,33 @@ def render_academic_footer():
     """Render consistent academic footer"""
     st.markdown("---")
     st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, var(--text-dark) 0%, #34495e 100%);
-        color: white;
-        padding: 2rem;
-        text-align: center;
-        border-radius: 12px;
-        margin-top: 3rem;
-        box-shadow: 0 8px 24px var(--shadow-medium);
-    ">
-        <h4 style="margin-top: 0; color: white; font-weight: 600;">
-            UCL Master's Dissertation Research
-        </h4>
-        <p style="margin-bottom: 0; opacity: 0.9; font-size: 1rem; line-height: 1.5;">
-            Building AI Literacy Through Simulation: Evaluating LLM-Assisted Cognitive Bias Training
-        </p>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.7; font-size: 0.9rem;">
-            Cognitive Bias Recognition • Professional Training • AI Assistance Research
-        </p>
+    <div class="academic-footer-content">
+        <h4>UCL Master's Dissertation Research</h4>
+        <p>Building AI Literacy Through Simulation: Evaluating LLM-Assisted Cognitive Bias Training</p>
+        <p>Cognitive Bias Recognition • Professional Training • AI Assistance Research</p>
     </div>
     """, unsafe_allow_html=True)
 
 def render_page_header(title, subtitle=None, icon="🧠"):
     """Render consistent page headers"""
     st.markdown(f"""
-    <div style="text-align: center; margin-bottom: 2rem;">
-        <h1 style="
-            color: var(--primary-blue);
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            text-shadow: 0 2px 4px rgba(31, 119, 180, 0.1);
-        ">
-            {icon} {title}
-        </h1>
-        {f'<p style="color: var(--text-light); font-size: 1.2rem; margin-bottom: 2rem;">{subtitle}</p>' if subtitle else ''}
+    <div class="page-header">
+        <h1>{icon} {title}</h1>
+        {f'<p>{subtitle}</p>' if subtitle else ''}
     </div>
     """, unsafe_allow_html=True)
 
 def render_bias_cards():
     """Render the three main cognitive bias cards"""
-    st.markdown("""
-    <h2 style="
-        font-size: 1.8rem;
-        color: var(--text-dark);
-        border-bottom: 3px solid var(--primary-blue);
-        padding-bottom: 0.5rem;
-        margin: 2.5rem 0 1.5rem 0;
-        font-weight: 600;
-    ">
-        🧠 Cognitive Biases We Target
-    </h2>
-    """, unsafe_allow_html=True)
+    st.markdown('<h2 class="bias-section-header">🧠 Cognitive Biases We Target</h2>', unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("""
-        <div style="
-            background: white;
-            border: 1px solid var(--border-light);
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 4px 16px var(--shadow-light);
-            border-left: 4px solid var(--accent-orange);
-            height: 100%;
-        ">
-            <h4 style="color: var(--warning-red); margin-top: 0; font-size: 1.3rem;">⚡ Confirmation Bias</h4>
-            <p style="line-height: 1.6; color: var(--text-dark); margin-bottom: 0;">
+        <div class="bias-card-confirmation">
+            <h4>⚡ Confirmation Bias</h4>
+            <p>
             The tendency to search for, interpret, and recall information that confirms pre-existing beliefs 
             while giving disproportionately less consideration to alternative possibilities.
             </p>
@@ -227,17 +152,9 @@ def render_bias_cards():
     
     with col2:
         st.markdown("""
-        <div style="
-            background: white;
-            border: 1px solid var(--border-light);
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 4px 16px var(--shadow-light);
-            border-left: 4px solid var(--accent-orange);
-            height: 100%;
-        ">
-            <h4 style="color: var(--warning-red); margin-top: 0; font-size: 1.3rem;">⚓ Anchoring Bias</h4>
-            <p style="line-height: 1.6; color: var(--text-dark); margin-bottom: 0;">
+        <div class="bias-card-anchoring">
+            <h4>⚓ Anchoring Bias</h4>
+            <p>
             The tendency to rely too heavily on the first piece of information encountered 
             when making decisions, serving as an "anchor" for subsequent judgments.
             </p>
@@ -246,17 +163,9 @@ def render_bias_cards():
     
     with col3:
         st.markdown("""
-        <div style="
-            background: white;
-            border: 1px solid var(--border-light);
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 4px 16px var(--shadow-light);
-            border-left: 4px solid var(--accent-orange);
-            height: 100%;
-        ">
-            <h4 style="color: var(--warning-red); margin-top: 0; font-size: 1.3rem;">🧩 Availability Heuristic</h4>
-            <p style="line-height: 1.6; color: var(--text-dark); margin-bottom: 0;">
+        <div class="bias-card-availability">
+            <h4>🧩 Availability Heuristic</h4>
+            <p>
             Estimating the likelihood of events based on their availability in memory, 
             influenced by how recent or emotionally charged the examples are.
             </p>
@@ -379,6 +288,18 @@ def render_cta_section():
         <h2 style="margin-top: 0; color: white;">Ready to Begin Your Training?</h2>
         <p style="font-size: 1.1rem; margin-bottom: 2rem; opacity: 0.9;">
         Experience professional-grade cognitive bias training with AI-assisted learning
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_research_access_section():
+    """Render the research team access section"""
+    st.markdown("---")
+    st.markdown("""
+    <div class="home-research-access">
+        <h3>🔬 Research Team Access</h3>
+        <p>
+        Access automated testing, statistical analysis, and methodology validation tools
         </p>
     </div>
     """, unsafe_allow_html=True)

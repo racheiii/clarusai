@@ -21,6 +21,7 @@ from utils import (
     render_bias_cards,
     render_domain_cards,
     render_cta_section,
+    render_research_access_section,
     render_academic_footer
 )
 import config
@@ -69,22 +70,7 @@ def main():
             st.switch_page("pages/01_Scenarios.py")
     
     # Research access section
-    st.markdown("---")
-    st.markdown("""
-    <div style="
-        background: #f8f9fa;
-        border: 2px dashed #1f77b4;
-        border-radius: 12px;
-        padding: 2rem;
-        margin: 2rem 0;
-        text-align: center;
-    ">
-        <h3 style="color: #1f77b4; margin-top: 0;">🔬 Research Team Access</h3>
-        <p style="color: #2c3e50; margin-bottom: 1.5rem;">
-        Access automated testing, statistical analysis, and methodology validation tools
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    render_research_access_section()
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
