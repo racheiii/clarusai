@@ -1,5 +1,6 @@
 """
 Configuration settings for ClārusAI
+UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 config.py - Configuration settings and constants
 """
 import os
@@ -8,13 +9,13 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# API Configuration
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-API_ENABLED = ANTHROPIC_API_KEY is not None
+# AI API Configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+API_ENABLED = GEMINI_API_KEY is not None
 
 # Warning if API not configured
 if not API_ENABLED:
-    print("⚠️  ANTHROPIC_API_KEY not configured - API features disabled")
+    print("⚠️  GEMINI_API_KEY not configured - AI guidance features disabled")
 
 # Application Settings
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
@@ -31,7 +32,7 @@ SCORING_THRESHOLDS = {
     "bias_recognition_min_terms": int(os.getenv("BIAS_RECOGNITION_MIN_TERMS", "2"))
 }
 
-# Bias Recognition Keywords
+# Bias Recognition Keywords for Experimental Analysis
 BIAS_KEYWORDS = {
     "confirmation_bias": [
         "confirmation bias", "selective attention", "cherry picking", 
@@ -50,7 +51,7 @@ BIAS_KEYWORDS = {
     ]
 }
 
-# Persona Definitions for Research
+# Persona Definitions for Research Simulation
 PERSONAS = {
     "novice": {
         "description": "Junior professional with 2-3 years experience, limited bias training, relies on intuition",
@@ -60,6 +61,36 @@ PERSONAS = {
         "description": "Senior professional with 10+ years experience, some bias awareness, systematic approach", 
         "characteristics": ["systematic", "experienced", "cautious", "evidence-based"]
     }
+}
+
+# Gemini API Configuration
+GEMINI_CONFIG = {
+    "model": "gemini-pro",
+    "generation_config": {
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 40,
+        "max_output_tokens": 512,
+        "candidate_count": 1,
+    },
+    "safety_settings": [
+        {
+            "category": "HARM_CATEGORY_HARASSMENT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_HATE_SPEECH", 
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        }
+    ]
 }
 
 # File Paths

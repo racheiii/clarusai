@@ -56,3 +56,8 @@ statistical_reports/
 raw_datasets/venv/
 __pycache__/
 .DS_Store
+
+.env
+data/responses/
+__pycache__/
+*.pyc
