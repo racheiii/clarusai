@@ -65,9 +65,7 @@ ClarusAI/
 ├── src/
 
 │   ├── models.py                      # Data classes (Scenario, Response, Persona, ExperimentCondition)
-
-│   ├── claude_service.py              # Claude API integration & persona-based response generation
-
+|
 │   ├── scoring_engine.py              # 6-dimensional assessment algorithms (similarity, originality, bias recognition, etc.)
 
 │   ├── research_pipeline.py           # Automated 72-response generation & live statistical validation
@@ -80,14 +78,9 @@ ClarusAI/
 
 │   ├── 01_Scenarios.py             # User training interface with scenario selection & AI assistance toggle
 
-│   ├── 02_Assessment.py           # Live 6-dimensional scoring demonstration & educational feedback
+│   ├── 02_Results.py              # Personal analytics, session summary, research contribution consent
 
-│   ├── 03_Results.py              # Personal analytics, session summary, research contribution consent
-
-│   ├── 04_Dashboard.py            # Research automation control centre & hypothesis testing
-
-│   └── 05_Methodology.py          # Algorithm transparency, validation metrics, reproducibility documentation
-
+│   ├── 03_Dashboard.py            # Research automation control centre & hypothesis testing
 │
 
 └── exports/

@@ -6,16 +6,17 @@ utils.py - Reusable navigation and page configuration functions + 4-stage traini
 
 import streamlit as st
 from pathlib import Path
+from typing import List, Optional
 
-def load_css():
-    """Load custom CSS safely with error handling"""
+def load_css() -> None:
+    """Load custom CSS safely with error handling - NO FALLBACK CSS"""
     try:
         css_path = Path("assets/styles/main.css")
         if css_path.exists():
             with open(css_path, "r", encoding="utf-8") as f:
                 st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
         else:
-            # Minimal fallback CSS only
+            # Only essential Streamlit cleanup, no visual styles
             st.markdown("""
             <style>
             #MainMenu {visibility: hidden;}
@@ -28,7 +29,7 @@ def load_css():
     except Exception as e:
         st.warning(f"Could not load CSS: {e}")
 
-def setup_page_config(page_title, page_icon="🧠", enable_sidebar=True):
+def setup_page_config(page_title: str, page_icon: str = "🧠", enable_sidebar: bool = True) -> None:
     """Configure Streamlit page settings consistently"""
     st.set_page_config(
         page_title=f"ClārusAI - {page_title}",
@@ -42,7 +43,7 @@ def setup_page_config(page_title, page_icon="🧠", enable_sidebar=True):
         }
     )
 
-def get_current_page():
+def get_current_page() -> str:
     """Determine current page from URL or session state"""
     try:
         # Get current page from Streamlit's query params or URL
@@ -58,20 +59,18 @@ def get_current_page():
                 return 'home'
             elif '01_Scenarios.py' in filename:
                 return 'scenarios'
-            elif '02_Assessment.py' in filename:
-                return 'assessment'
-            elif '03_Results.py' in filename:
+            elif '02_Results.py' in filename:
                 return 'results'
-            elif '04_Dashboard.py' in filename:
+            elif '03_Dashboard.py' in filename:
                 return 'dashboard'
-            elif '05_Methodology.py' in filename:
+            elif '04_Methodology.py' in filename:
                 return 'methodology'
         
         return 'home'
     except:
         return 'home'
 
-def render_navigation(current_page=None):
+def render_navigation(current_page: Optional[str] = None) -> None:
     """Render consistent navigation sidebar"""
     if current_page is None:
         current_page = get_current_page()
@@ -113,7 +112,7 @@ def render_navigation(current_page=None):
         </div>
         """, unsafe_allow_html=True)
 
-def render_academic_footer():
+def render_academic_footer() -> None:
     """Render consistent academic footer"""
     st.markdown("---")
     st.markdown("""
@@ -124,7 +123,7 @@ def render_academic_footer():
     </div>
     """, unsafe_allow_html=True)
 
-def render_page_header(title, subtitle=None, icon="🧠"):
+def render_page_header(title: str, subtitle: Optional[str] = None, icon: str = "🧠") -> None:
     """Render consistent page headers"""
     st.markdown(f"""
     <div class="page-header">
@@ -133,7 +132,7 @@ def render_page_header(title, subtitle=None, icon="🧠"):
     </div>
     """, unsafe_allow_html=True)
 
-def render_bias_cards():
+def render_bias_cards() -> None:
     """Render the three main cognitive bias cards"""
     st.markdown('<h2 class="bias-section-header">🧠 Cognitive Biases We Target</h2>', unsafe_allow_html=True)
     
@@ -172,7 +171,7 @@ def render_bias_cards():
         </div>
         """, unsafe_allow_html=True)
 
-def render_domain_cards():
+def render_domain_cards() -> None:
     """Render the three professional domain cards"""
     st.markdown("""
     <h2 style="
@@ -240,7 +239,7 @@ def render_domain_cards():
         </div>
         """, unsafe_allow_html=True)
 
-def render_hero_section():
+def render_hero_section() -> None:
     """Render main hero section"""
     st.markdown("""
     <div style="
@@ -273,7 +272,7 @@ def render_hero_section():
     </div>
     """, unsafe_allow_html=True)
 
-def render_cta_section():
+def render_cta_section() -> None:
     """Render call-to-action section"""
     st.markdown("""
     <div style="
@@ -292,7 +291,7 @@ def render_cta_section():
     </div>
     """, unsafe_allow_html=True)
 
-def render_research_access_section():
+def render_research_access_section() -> None:
     """Render the research team access section"""
     st.markdown("---")
     st.markdown("""
@@ -305,12 +304,19 @@ def render_research_access_section():
     """, unsafe_allow_html=True)
 
 # =============================================================================
-# 4-STAGE TRAINING SPECIFIC UTILITIES
+# 4-STAGE TRAINING SPECIFIC UTILITIES - ENHANCED
 # =============================================================================
 
-def render_progress_indicator(current_stage, total_stages, stage_names):
-    """Render progress indicator for multi-stage interactions"""
-    progress_percentage = (current_stage / total_stages) * 100
+def render_progress_indicator(current_stage: int, total_stages: int, stage_names: List[str]) -> None:
+    """
+    Render enhanced progress indicator for multi-stage interactions.
+    
+    Args:
+        current_stage: Current stage number (0-based)
+        total_stages: Total number of stages
+        stage_names: List of stage names
+    """
+    progress_percentage = ((current_stage + 1) / total_stages) * 100
     
     st.markdown(f"""
     <div style="background: var(--background-light); padding: 1rem; border-radius: 12px; margin: 1.5rem 0;">
@@ -326,30 +332,49 @@ def render_progress_indicator(current_stage, total_stages, stage_names):
         </div>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Visual stage progression
+    cols = st.columns(total_stages)
+    for i in range(total_stages):
+        with cols[i]:
+            if i < current_stage:
+                # Completed stage
+                st.markdown(f"✅ **{stage_names[i]}**")
+            elif i == current_stage:
+                # Current stage
+                st.markdown(f"🔄 **{stage_names[i]}**")
+            else:
+                # Future stage
+                st.markdown(f"⏳ {stage_names[i]}")
 
-def render_stage_context(previous_responses, stage_names):
-    """Show previous responses as read-only context"""
+def render_stage_context(previous_responses: List[str], stage_names: List[str]) -> None:
+    """
+    Show previous responses as read-only context.
+    
+    Args:
+        previous_responses: List of previous response texts
+        stage_names: List of stage names
+    """
     if not previous_responses:
         return
     
-    st.markdown("### 📝 Your Previous Responses")
-    
-    for idx, (stage_name, response) in enumerate(zip(stage_names[:len(previous_responses)], previous_responses)):
-        st.markdown(f"""
-        <div style="background: var(--border-light); padding: 1rem; border-radius: 8px; margin: 0.5rem 0; border-left: 3px solid var(--secondary-blue);">
-            <h5 style="color: var(--text-dark); margin-top: 0; font-size: 1rem;">{stage_name}</h5>
-            <p style="color: var(--text-light); margin: 0; font-style: italic; line-height: 1.4;">
-                {response[:200]}{"..." if len(response) > 200 else ""}
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+    with st.expander("📚 Previous Stage Responses", expanded=False):
+        for i, (response, stage_name) in enumerate(zip(previous_responses, stage_names)):
+            if response and response.strip():
+                st.markdown(f"**{stage_name}:**")
+                st.markdown(f"> {response[:200]}{'...' if len(response) > 200 else ''}")
+                if i < len(previous_responses) - 1:  # Don't add separator after last item
+                    st.markdown("---")
 
-def render_training_navigation():
-    """Minimal navigation for training interface without sidebar"""
+def render_training_navigation() -> None:
+    """
+    Enhanced navigation for training interface without sidebar.
+    Provides clean, minimal navigation that doesn't interfere with training flow.
+    """
     st.markdown("""
     <div style="position: fixed; top: 10px; left: 10px; z-index: 1000;">
-        <div style="background: var(--background-light); padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-light);">
-            <span style="color: var(--primary-blue); font-weight: 600; font-size: 0.9rem;">🧠 ClārusAI</span>
+        <div style="background: rgba(255, 255, 255, 0.95); padding: 0.5rem; border-radius: 8px; border: 1px solid #e0e0e0; backdrop-filter: blur(10px);">
+            <span style="color: #1976d2; font-weight: 600; font-size: 0.9rem;">🧠 ClārusAI</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -360,8 +385,14 @@ def render_training_navigation():
         if st.button("🏠", help="Return to Home", key="nav_home"):
             st.switch_page("Home.py")
 
-def setup_training_page_config(page_title, page_icon="🎯"):
-    """Page configuration specifically for training interface (no sidebar)"""
+def setup_training_page_config(page_title: str, page_icon: str = "🎯") -> None:
+    """
+    Enhanced page configuration specifically for training interface (no sidebar).
+    
+    Args:
+        page_title: Title for the browser tab
+        page_icon: Icon for the browser tab
+    """
     st.set_page_config(
         page_title=f"ClārusAI - {page_title}",
         page_icon=page_icon,
@@ -384,5 +415,109 @@ def setup_training_page_config(page_title, page_icon="🎯"):
     .stDeployButton {display: none;}
     .stApp > header {display: none;}
     [data-testid="stHeader"] {display: none !important;}
+    
+    /* Ensure main container has proper spacing without sidebar */
+    .main .block-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
     </style>
+    """, unsafe_allow_html=True)
+
+# =============================================================================
+# EXPERIMENTAL INTERFACE UTILITIES
+# =============================================================================
+
+def render_experimental_progress(current_stage: int, total_stages: int = 4) -> None:
+    """
+    Render experimental progress indicator specifically for research interface.
+    
+    Args:
+        current_stage: Current stage (0-based)
+        total_stages: Total number of stages (default 4)
+    """
+    progress = (current_stage + 1) / total_stages
+    
+    st.markdown(f"""
+    <div class="experimental-progress">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+            <span style="font-weight: 600;">Experimental Progress</span>
+            <span style="color: #666;">{current_stage + 1}/{total_stages}</span>
+        </div>
+        <div style="background: #e0e0e0; height: 6px; border-radius: 3px; overflow: hidden;">
+            <div style="background: #4caf50; height: 100%; width: {progress * 100}%; transition: width 0.3s ease;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_condition_indicator(user_expertise, ai_assistance_enabled: bool) -> None:
+    """
+    Render experimental condition indicator for research tracking.
+    
+    Args:
+        user_expertise: UserExpertise enum value
+        ai_assistance_enabled: Boolean indicating AI assistance status
+    """
+    expertise_label = "Expert" if user_expertise and user_expertise.value == "expert" else "Novice"
+    assistance_label = "AI-Assisted" if ai_assistance_enabled else "Unassisted"
+    
+    st.markdown(f"""
+    <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 0.5rem; margin: 0.5rem 0; text-align: center;">
+        <small style="color: #6c757d;">Experimental Condition: <strong>{expertise_label} • {assistance_label}</strong></small>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_research_metadata(scenario_id: str, bias_type: str, domain: str) -> None:
+    """
+    Render research metadata for debugging and validation.
+    
+    Args:
+        scenario_id: Unique scenario identifier
+        bias_type: Type of cognitive bias being tested
+        domain: Professional domain of the scenario
+    """
+    if st.secrets.get("DEBUG", False):  # Only show in debug mode
+        with st.expander("🔍 Research Metadata", expanded=False):
+            st.code(f"""
+Scenario ID: {scenario_id}
+Bias Type: {bias_type}
+Domain: {domain}
+            """)
+
+def render_session_quality_indicator(word_count: int, response_time: float, guidance_used: bool) -> None:
+    """
+    Render session quality indicators for research validation.
+    
+    Args:
+        word_count: Number of words in current response
+        response_time: Time spent on current response (seconds)
+        guidance_used: Whether AI guidance was used
+    """
+    quality_indicators = []
+    
+    if word_count >= 20:
+        quality_indicators.append("✅ Sufficient detail")
+    elif word_count >= 10:
+        quality_indicators.append("⚠️ Moderate detail")
+    else:
+        quality_indicators.append("❌ Brief response")
+    
+    if response_time >= 30:
+        quality_indicators.append("✅ Thoughtful timing")
+    elif response_time >= 15:
+        quality_indicators.append("⚠️ Moderate timing")
+    else:
+        quality_indicators.append("❌ Quick response")
+    
+    if guidance_used:
+        quality_indicators.append("🤖 AI guidance used")
+    else:
+        quality_indicators.append("🧠 Independent analysis")
+    
+    st.markdown(f"""
+    <div style="background: #f8f9fa; border-radius: 4px; padding: 0.5rem; margin: 0.5rem 0; font-size: 0.85rem;">
+        {" • ".join(quality_indicators)}
+    </div>
     """, unsafe_allow_html=True)
