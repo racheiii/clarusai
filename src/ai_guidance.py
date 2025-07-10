@@ -184,9 +184,9 @@ class AIGuidance:
         1. **DO NOT mention or refer to cognitive biases by name.** (e.g. "confirmation bias", "anchoring bias", "availability heuristic")
         2. **Avoid** the terms: "confirmation", "anchoring", "availability", even if they seem helpful.
         3. If you wish to allude to flawed reasoning, use **general phrasing only**, such as:
-        - “be cautious of initial impressions”
-        - “ensure you seek out multiple perspectives”
-        - “avoid relying only on vivid or memorable examples”
+        - "be cautious of initial impressions"
+        - "ensure you seek out multiple perspectives"
+        - "avoid relying only on vivid or memorable examples"
         4. If you break this rule, it may invalidate the experimental condition. The user should never know which bias is being studied.
 
         ---
@@ -260,6 +260,12 @@ class AIGuidance:
         if scenario.get('ai_appropriateness', '').lower() not in ['helpful', 'neutral']:
             return None
         
+        # Check if guidance has already been requested for this stage
+        guidance_requested_key = f'guidance_requested_stage_{current_stage}'
+        guidance_text_key = f'guidance_text_stage_{current_stage}'
+        guidance_already_requested = safe_get_session_value(guidance_requested_key, False)
+        stored_guidance_text = safe_get_session_value(guidance_text_key, None)
+        
         # Display AI status
         api_status = safe_get_session_value('api_status', 'unknown')
         status_display = self._get_status_display(api_status)
@@ -274,7 +280,26 @@ class AIGuidance:
         </div>
         """, unsafe_allow_html=True)
         
-        # Guidance request button
+        # Show guidance content if already requested
+        if guidance_already_requested and stored_guidance_text:
+            st.markdown(f"""
+            <div class="ai-guidance-content">
+                <h6 style="color: var(--accent-orange); margin-top: 0;">🤖 AI Analysis & Guidance</h6>
+                <p style="color: var(--text-dark); margin: 0; line-height: 1.5; font-style: italic;">
+                    {stored_guidance_text}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Show disabled button to indicate guidance was already used
+            st.button("✓ AI Guidance Used", 
+                     key=f"guidance_stage_{current_stage}_disabled", 
+                     disabled=True,
+                     help="AI guidance has already been requested for this stage")
+            
+            return stored_guidance_text
+        
+        # Guidance request button (only if not already requested)
         if st.button("💡 Get AI Guidance", key=f"guidance_stage_{current_stage}", type="secondary"):
             
             # Show loading indicator
@@ -286,20 +311,15 @@ class AIGuidance:
                 # Request AI guidance
                 guidance_text, api_used = self.get_guidance(scenario, current_stage, previous_responses)
             
-            # Display AI guidance with clear attribution
-            st.markdown(f"""
-            <div class="ai-guidance-content">
-                <h6 style="color: var(--accent-orange); margin-top: 0;">🤖 AI Analysis & Guidance</h6>
-                <p style="color: var(--text-dark); margin: 0; line-height: 1.5; font-style: italic;">
-                    {guidance_text}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+            # Store guidance text and mark as requested
+            safe_set_session_value(guidance_requested_key, True)
+            safe_set_session_value(guidance_text_key, guidance_text)
             
             # Track guidance usage
             self._track_guidance_usage(current_stage, guidance_text, api_used, scenario)
             
-            return guidance_text
+            # Rerun to show the guidance content and disabled button
+            st.rerun()
         
         return None
     
@@ -368,8 +388,7 @@ class AIGuidance:
                 'domain': domain,
                 'timestamp': datetime.now().isoformat()
             })
-
-            
+ 
         except Exception as e:
             logger.error(f"Failed to track guidance usage: {e}")
     

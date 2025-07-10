@@ -66,9 +66,11 @@ def main():
             use_container_width=True, 
             help="Begin interactive bias recognition training"
         ):
+            from src.session_manager import SessionManager
+            SessionManager().reset_experimental_session()
             st.session_state.current_page = "scenarios"
             st.switch_page("pages/01_Scenarios.py")
-    
+
     # Research access section
     render_research_access_section()
     

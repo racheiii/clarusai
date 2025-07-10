@@ -2,7 +2,7 @@
 ClārusAI: 4-Stage Cognitive Bias Training Interface
 UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
-pages/01_Scenarios.py - Production-ready experimental interface
+pages/01_Scenarios.py - Experimental interface
 
 RESEARCH OBJECTIVE:
 This module implements the core experimental interface for investigating whether 
@@ -13,9 +13,6 @@ EXPERIMENTAL DESIGN:
 - Progressive 4-Stage Interaction: Primary Analysis → Cognitive Factors → Mitigation Strategies → Transfer Learning
 - Bias-Blind Methodology: Participants unaware of specific bias being tested until completion
 - Comprehensive Data Collection: All interactions logged for 6-dimensional scoring analysis
-
-Author: Rachel Seah
-Date: July 2025
 """
 
 import streamlit as st
@@ -117,7 +114,7 @@ class ScenariosPageController:
             # ===========================
             # 🧭 RENDER ROUTING AND FLOW
             # ===========================
-            render_training_navigation()
+            self._render_compact_navigation()
             self._route_experimental_flow(scenarios_df)
 
             # Developer Debug (optional)
@@ -128,6 +125,30 @@ class ScenariosPageController:
 
         except Exception as e:
             self._handle_critical_error(e)
+    
+    def _render_compact_navigation(self):
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            st.markdown("### ClārusAI Training Interface")
+        
+        with col3: 
+            if st.button("🏠 Return Home", key="nav_home", help="Return to main menu"):
+                # Show confirmation dialog
+                self._show_navigation_confirmation()
+
+    @st.dialog("Confirm Navigation")
+    def _show_navigation_confirmation(self):
+        st.write("⚠️ **Warning**: Returning home will lose your current progress.")
+        st.write("Your responses will not be saved unless you complete all 4 stages.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Cancel", use_container_width=True):
+                st.rerun()
+        with col2:
+            if st.button("Return Home", type="primary", use_container_width=True):
+                st.switch_page("Home.py")
     
     def _validate_configuration(self):
         """Validate system configuration for research integrity."""
@@ -158,6 +179,8 @@ class ScenariosPageController:
             self._render_setup_phase(scenarios_df)
         
         elif current_flow == 'scenario':
+            # Show progress toast only when entering scenario phase
+            self.ui_components.show_progress_toast()
             # Phase 2: 4-Stage Progressive Interaction
             self._render_scenario_phase()
         
@@ -238,14 +261,6 @@ class ScenariosPageController:
         scenario = experimental_session.assigned_scenario.__dict__
         
         # Render completion interface
-        
-        st.markdown("""
-        <div class='thank-you'>
-        🧠 **Thank you for participating in this cognitive reasoning protocol.**  
-        Your responses help us understand how professionals interact with AI in high-stakes decision-making.
-        </div>
-        """, unsafe_allow_html=True)
-
         navigation_choice = self.ui_components.render_completion_interface(
             scenario=scenario,
             session_manager=self.session_manager,
@@ -257,7 +272,10 @@ class ScenariosPageController:
             # st.switch_page("pages/02_Results.py")  # Disabled until Results page is ready  # FIXED: Was 02_Assessment.py
             pass  # No action for now since results page is disabled
         elif navigation_choice == 'new_scenario':
+            # Reset experimental session and stay on same page
             self.session_manager.reset_experimental_session()
+            # Clear toast flags for new session
+            safe_set_session_value('progress_toast_shown', False)
             st.rerun()
         elif navigation_choice == 'home':
             st.switch_page("Home.py")

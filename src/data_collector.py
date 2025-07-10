@@ -41,30 +41,6 @@ def enum_to_str(obj):
     else:
         return obj
 
-
-    from enum import Enum
-    import numpy as np
-    if isinstance(obj, Enum):
-        return obj.value
-    elif isinstance(obj, (np.integer, np.floating)):
-        return obj.item()
-    elif isinstance(obj, dict):
-        return {k: enum_to_str(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [enum_to_str(i) for i in obj]
-    else:
-        return obj
-
-
-    if isinstance(obj, Enum):
-        return obj.value
-    elif isinstance(obj, dict):
-        return {k: enum_to_str(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [enum_to_str(i) for i in obj]
-    else:
-        return obj
-
 # Setup logging
 logger = logging.getLogger(__name__)
 
@@ -358,6 +334,7 @@ class DataCollector:
                 'bias_revealed': True,
                 'bias_revelation_time': datetime.now().isoformat(),
                 'completion_method': 'full_4stage_protocol',
+                'llm_feedback': safe_get_session_value('llm_feedback', [None]*4),
                 'data_quality_assessment': self._validate_session_quality(experimental_session),
                 'research_version': '2.0'
             })

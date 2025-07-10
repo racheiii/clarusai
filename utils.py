@@ -23,11 +23,70 @@ def load_css() -> None:
             footer {visibility: hidden;}
             header {visibility: hidden;}
             [data-testid="stHeader"] {display: none !important;}
-            .main .block-container {padding-top: 2rem; max-width: 1200px;}
+            .main .block-container {padding-top: 1rem; max-width: 1200px;}
             </style>
             """, unsafe_allow_html=True)
     except Exception as e:
         st.warning(f"Could not load CSS: {e}")
+
+def apply_compact_layout() -> None:
+    """Apply compact layout CSS to reduce whitespace throughout the app"""
+    compact_css = """
+    <style>
+    /* Compact layout improvements */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+    
+    /* Reduce component spacing */
+    .element-container {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Compact button spacing */
+    .stButton {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Reduce title spacing */
+    h1, h2, h3 {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Compact columns */
+    .row-widget {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Compact forms */
+    .stForm {
+        padding: 0.5rem !important;
+    }
+    
+    /* Compact metrics */
+    [data-testid="metric-container"] {
+        padding: 0.25rem !important;
+    }
+    
+    /* Compact expanders */
+    .streamlit-expanderHeader {
+        padding: 0.5rem !important;
+    }
+    
+    /* Compact text areas */
+    .stTextArea > div {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Compact progress bars */
+    .stProgress {
+        margin: 0.5rem 0 !important;
+    }
+    </style>
+    """
+    st.markdown(compact_css, unsafe_allow_html=True)
 
 def setup_page_config(page_title: str, page_icon: str = "🧠", enable_sidebar: bool = True) -> None:
     """Configure Streamlit page settings consistently"""
@@ -368,21 +427,17 @@ def render_stage_context(previous_responses: List[str], stage_names: List[str]) 
 
 def render_training_navigation() -> None:
     """
-    Enhanced navigation for training interface without sidebar.
+    Enhanced compact navigation for training interface without sidebar.
     Provides clean, minimal navigation that doesn't interfere with training flow.
     """
-    st.markdown("""
-    <div style="position: fixed; top: 10px; left: 10px; z-index: 1000;">
-        <div style="background: rgba(255, 255, 255, 0.95); padding: 0.5rem; border-radius: 8px; border: 1px solid #e0e0e0; backdrop-filter: blur(10px);">
-            <span style="color: #1976d2; font-weight: 600; font-size: 0.9rem;">🧠 ClārusAI</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Compact navigation header with reduced spacing
+    col1, col2 = st.columns([4, 1])
     
-    # Return to home button in top right
-    col1, col2 = st.columns([9, 1])
+    with col1:
+        st.markdown("### 🎯 ClārusAI Training Interface")
+    
     with col2:
-        if st.button("🏠", help="Return to Home", key="nav_home"):
+        if st.button("🏠 Return Home", key="nav_home", help="Return to main menu"):
             st.switch_page("Home.py")
 
 def setup_training_page_config(page_title: str, page_icon: str = "🎯") -> None:
@@ -420,6 +475,8 @@ def setup_training_page_config(page_title: str, page_icon: str = "🎯") -> None
     .main .block-container {
         padding-left: 1rem;
         padding-right: 1rem;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
         max-width: 1200px;
         margin: 0 auto;
     }

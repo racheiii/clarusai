@@ -1073,3 +1073,12 @@ header {visibility: hidden;}
         border: 1px solid #000000 !important;
     }
 }
+
+.session-completion-thankyou {
+  background-color: #f5f7fa;
+  border-left: 4px solid var(--accent-orange);
+  padding: 1.25rem;
+  margin-top: 1.5rem;
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+}

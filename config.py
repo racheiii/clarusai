@@ -13,7 +13,7 @@ load_dotenv()
 
 # AI API Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-API_ENABLED = GEMINI_API_KEY is not None
+API_ENABLED = bool(GEMINI_API_KEY and GEMINI_API_KEY.strip() and GEMINI_API_KEY not in ['None', 'none', 'null'])
 
 # Warning if API not configured
 if not API_ENABLED:
