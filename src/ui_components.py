@@ -1,14 +1,23 @@
 """
-ClārusAI: User Interface Components
+ClārusAI: Enhanced User Interface Components
 UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
-src/ui_components.py - Modular UI components for the experimental interface
+src/ui_components.py - Comprehensive UI components for 4-stage experimental interface
 
 Purpose:
-Provides reusable UI components for the 4-stage experimental protocol
+Provides enhanced, submission-ready UI components for the complete experimental
+protocol including LLM tutor integration, comprehensive performance analysis,
+and sophisticated feedback systems. Optimized for research data collection
+while maintaining excellent user experience and academic presentation standards.
 
-Author: Rachel Seah
-Date: July 2025
+Key Features:
+- Integrated LLM tutor feedback with robust fallback systems
+- Comprehensive performance analysis using enhanced 6-dimensional scoring
+- Always-visible feedback containers ensuring consistent user experience
+- Enhanced bias revelation with educational content integration
+- Research-grade interaction logging and dependency pattern tracking
+
+Dependencies: streamlit, datetime, typing
 """
 import streamlit as st
 import time
@@ -361,58 +370,61 @@ class UIComponents:
     
     def _generate_and_save_unified_feedback(self, scenario: Dict[str, Any], current_stage: int, response: str) -> None:
         """
-        OPTIMIZED: Generate unified feedback combining LLM and performance analysis.
-        
-        Key Optimization: Reuses scores already calculated by data_collector
-        to eliminate duplicate NLP calculations (50% CPU reduction).
+        Generates unified feedback combining LLM reflection and score-based analysis.
+        Safe for use with or without LLM connected.
         """
         try:
-            # OPTIMIZED: Get scores from experimental session (already calculated by data_collector)
+            # Get experimental session scores from prior stage
             experimental_session = safe_get_session_value('experimental_session')
             scores = None
-            
+
             if experimental_session and len(experimental_session.stage_responses) > current_stage:
                 stage_response = experimental_session.stage_responses[current_stage]
                 if stage_response.scores:
                     scores = stage_response.scores.__dict__
-            
-            # Generate LLM feedback (existing system)
-            try:
-                llm_feedback = generate_stage_feedback(scenario, current_stage, response)
-            except Exception:
-                llm_feedback = f"Thank you for your {STAGE_NAMES[current_stage].lower()} response. Your reasoning demonstrates thoughtful engagement with the scenario."
-            
-            # OPTIMIZED: Generate performance analysis from existing scores (no duplicate calculation)
+
+            # Generate LLM feedback if enabled
+            llm_feedback = None
+            if getattr(config, "LLM_ENABLED", True):
+                try:
+                    llm_feedback = generate_stage_feedback(scenario, current_stage, response)
+                except Exception:
+                    llm_feedback = None  # Don't fallback with generic string
+
+            # Only show fallback message if no LLM and no scores
+            if llm_feedback is None and not scores:
+                llm_feedback = None  # This will trigger "No feedback generated" in UI
+
+            # Generate performance analysis
             if scores:
                 performance_analysis = self._create_performance_analysis_from_scores(scores, current_stage)
             else:
                 performance_analysis = self._create_fallback_analysis(current_stage)
-            
-            # OPTIMIZED: Store unified feedback (single storage system)
+
+            # Store feedback
             unified_feedback = {
                 'llm_feedback': llm_feedback,
                 'performance_analysis': performance_analysis,
                 'has_scores': scores is not None,
                 'timestamp': datetime.now().isoformat()
             }
-            
+
             stage_feedback = safe_get_session_value('stage_feedback', [None] * 4)
             stage_feedback[current_stage] = unified_feedback
             safe_set_session_value('stage_feedback', stage_feedback)
-            
-        except Exception as e:
-            # Fallback unified feedback
+
+        except Exception:
             fallback_feedback = {
-                'llm_feedback': f"Thank you for your {STAGE_NAMES[current_stage].lower()} response.",
+                'llm_feedback': None,
                 'performance_analysis': self._create_fallback_analysis(current_stage),
                 'has_scores': False,
                 'timestamp': datetime.now().isoformat()
             }
-            
+
             stage_feedback = safe_get_session_value('stage_feedback', [None] * 4)
             stage_feedback[current_stage] = fallback_feedback
             safe_set_session_value('stage_feedback', stage_feedback)
-    
+
     def _create_performance_analysis_from_scores(self, scores: Dict[str, Any], current_stage: int) -> Dict[str, Any]:
         """
         OPTIMIZED: Create performance analysis from existing scores.
@@ -622,15 +634,6 @@ class UIComponents:
         try:
             session_file = data_collector.save_complete_session(scenario)
             
-            st.markdown("""
-            <div class="session-completion-celebration">
-                <p style="text-align: center; font-size: 1.1rem; margin-bottom: 1.5rem; color: var(--text-dark);">
-                <strong>Thank you for participating in this cognitive reasoning protocol.</strong><br>
-                Your responses contribute valuable data to understanding AI-assisted learning patterns in professional decision-making.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
             # Session analytics
             self._render_session_analytics()
             
@@ -732,141 +735,77 @@ class UIComponents:
             st.metric("Analysis Depth", f"{avg_performance * 2.5:.1f}/10")
         
         # Stage-by-stage breakdown
+        
         st.markdown("#### 📈 Stage Performance Overview")
-        
+
         for i, feedback in enumerate(stage_feedback):
-            if feedback and feedback.get('performance_analysis'):
-                analysis = feedback['performance_analysis']
-                bias_score = analysis['bias_recognition_score']
-                
-                with st.expander(f"Stage {i + 1}: {STAGE_NAMES[i]} - {bias_score}", expanded=False):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("**Key Strengths:**")
-                        for strength in analysis['strengths']:
-                            st.markdown(f"✅ {strength}")
-                    
-                    with col2:
-                        st.markdown("**Development Areas:**")
-                        for improvement in analysis['areas_for_improvement']:
-                            st.markdown(f"💡 {improvement}")
-        
-        # Learning progression and recommendations
-        self._render_learning_progression_and_recommendations(overall_level, bias_level, scenario)
-    
-    def _render_learning_progression_and_recommendations(self, overall_level: str, bias_level: str, scenario: Dict[str, Any]) -> None:
-        """Render learning progression analysis and personalized recommendations."""
-        
-        # Learning progression
-        stage_feedback = safe_get_session_value('stage_feedback', [None] * 4)
-        valid_feedback = [f for f in stage_feedback if f is not None and f.get('performance_analysis')]
-        
-        if len(valid_feedback) >= 2:
-            st.markdown("#### 📈 Learning Progression")
-            
-            bias_scores = []
-            bias_mapping = {'Excellent': 4, 'Strong': 3, 'Moderate': 2, 'Developing': 1}
-            for feedback in valid_feedback:
-                bias_level_score = feedback['performance_analysis']['bias_recognition_score']
-                bias_scores.append(bias_mapping.get(bias_level_score, 2))
-            
-            if bias_scores[-1] > bias_scores[0]:
-                progression = "🔼 Improving"
-                description = "Your cognitive awareness improved throughout the training."
-            elif bias_scores[-1] < bias_scores[0]:
-                progression = "🔽 Fluctuating"
-                description = "Consider reviewing earlier strategies that worked well."
-            else:
-                progression = "➡️ Consistent"
-                description = "You maintained steady performance across stages."
-            
-            st.markdown(f"""
-            <div style="background: #f5f5f5; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                <strong>{progression}:</strong> {description}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Personalized recommendations
-        st.markdown("#### 💡 Personalized Development Recommendations")
-        
-        recommendations = []
-        
-        if overall_level in ['Developing', 'Moderate']:
-            recommendations.append("Focus on developing more systematic analytical approaches")
-        
-        if bias_level in ['Developing', 'Moderate']:
-            recommendations.append("Practice identifying cognitive factors that influence decision-making")
-        
-        # Bias-specific recommendation
-        bias_type = str(scenario.get('bias_type', '')).lower()
-        if 'confirmation' in bias_type:
-            recommendations.append("Practice seeking contradictory evidence before making decisions")
-        elif 'anchoring' in bias_type:
-            recommendations.append("Generate multiple initial estimates or perspectives")
-        elif 'availability' in bias_type:
-            recommendations.append("Consider base rates alongside memorable examples")
-        
-        # AI assistance recommendation
-        ai_assistance = safe_get_session_value('ai_assistance_enabled', False)
-        guidance_usage = sum(safe_get_session_value('guidance_usage', []))
-        
-        if ai_assistance and guidance_usage < 2:
-            recommendations.append("Consider using AI guidance more frequently to develop analytical skills")
-        elif ai_assistance and guidance_usage >= 3:
-            recommendations.append("Practice independent analysis to build autonomous decision-making skills")
-        
-        for i, rec in enumerate(recommendations[:3], 1):
-            st.markdown(f"{i}. {rec}")
+            title = f"Stage {i + 1}: {STAGE_NAMES[i]}"
+            with st.expander(title, expanded=False):
+                if feedback:
+                    llm = feedback.get("llm_feedback")
+                    has_scores = feedback.get("has_scores", False)
+
+                    if llm:
+                        st.markdown(f"🤖 *{llm}*")
+                    elif has_scores:
+                        st.info("✅ Scores recorded, but LLM feedback was not available.")
+                    else:
+                        st.warning("⚠️ No meaningful analysis generated due to incomplete or superficial response.")
+                else:
+                    st.info("⚠️ No feedback available for this stage.")    
     
     def _render_bias_revelation(self, scenario: Dict[str, Any]) -> None:
-        """Render bias revelation with educational content."""
-        
-        st.markdown("---")
-        st.markdown("### 🧠 Educational Debrief: Cognitive Bias Revelation")
-        
-        bias_type = scenario.get('bias_type', 'unknown')
-        learning_objective = scenario.get('bias_learning_objective', 'Recognize and mitigate cognitive biases in professional decision-making contexts.')
-        
-        st.markdown(f"""
-        <div class="bias-revelation-panel">
-            <h4 style="color: var(--text-dark); margin-top: 0;">🎯 Cognitive Bias Focus</h4>
-            <p style="color: var(--text-dark); font-size: 1.2rem; margin-bottom: 1rem;">
-                <strong>This scenario was designed to test: {bias_type.replace('_', ' ').title()}</strong>
-            </p>
-            <p style="color: var(--text-light); line-height: 1.6; margin: 0;">
-                <strong>Learning Objective:</strong> {learning_objective}
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        llm_feedback = scenario.get('llm_feedback')
-        if llm_feedback:
+        try:
+            st.markdown("---")
+            st.markdown("### 🧠 Educational Debrief: Cognitive Bias Revelation")
+
+            bias_type = scenario.get('bias_type') or None
+            learning_objective = scenario.get('bias_learning_objective') or None
+
+            if not bias_type:
+                st.info("⚠️ Bias type is not available for this scenario.")
+                return
+
+            bias_type_display = (
+                bias_type.replace('_', ' ').title()
+                if isinstance(bias_type, str)
+                else str(bias_type).split('.')[-1].replace('_', ' ').title()
+            )
+
             st.markdown(f"""
-            <div class="ai-guidance-content">
-                <h5 style="color: var(--accent-orange); margin-top: 0;">💡 Expert Learning Insights</h5>
-                <p style="color: var(--text-dark); line-height: 1.6; margin: 0;">
-                    {llm_feedback}
+            <div style="
+                background-color: #f9fafb;
+                border-left: 4px solid #2563eb;
+                padding: 1.2rem 1.5rem;
+                border-radius: 0.75rem;
+                margin-bottom: 1.5rem;
+            ">
+                <h4 style="margin-top: 0; color: #111827;">🎯 <span style="color: #1f2937;">Cognitive Bias Focus</span></h4>
+                <p style="font-size: 1.1rem; margin-bottom: 0.75rem;">
+                    This scenario was designed to test: {bias_type_display} 
+                </p>
+                <p style="font-size: 0.95rem; color: #4b5563;">
+                    <strong>Learning Objective:</strong> {learning_objective}
                 </p>
             </div>
             """, unsafe_allow_html=True)
-    
+
+        except Exception:
+            st.info("⚠️ Bias information is currently unavailable.")
+
+
     def _render_completion_navigation(self) -> str:
         """Render completion navigation options."""
         
         st.markdown("### 🚀 Next Steps")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("📊 View Results", use_container_width=True, type="primary"):
-                return 'results'
-        
-        with col2:
             if st.button("🎯 Try Another Scenario", use_container_width=True):
                 return 'new_scenario'
         
-        with col3:
+        with col2:
             if st.button("🏠 Return Home", use_container_width=True):
                 return 'home'
         

@@ -267,11 +267,8 @@ class ScenariosPageController:
             data_collector=self.data_collector
         )
         
-        # Handle navigation choices - FIXED: Updated to use correct page names
-        if navigation_choice == 'results':
-            # st.switch_page("pages/02_Results.py")  # Disabled until Results page is ready  # FIXED: Was 02_Assessment.py
-            pass  # No action for now since results page is disabled
-        elif navigation_choice == 'new_scenario':
+        # Handle navigation choices 
+        if navigation_choice == 'new_scenario':
             # Reset experimental session and stay on same page
             self.session_manager.reset_experimental_session()
             # Clear toast flags for new session

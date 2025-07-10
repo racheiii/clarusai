@@ -118,12 +118,8 @@ def get_current_page() -> str:
                 return 'home'
             elif '01_Scenarios.py' in filename:
                 return 'scenarios'
-            elif '02_Results.py' in filename:
-                return 'results'
-            elif '03_Dashboard.py' in filename:
+            elif '02_Dashboard.py' in filename:
                 return 'dashboard'
-            elif '04_Methodology.py' in filename:
-                return 'methodology'
         
         return 'home'
     except:
@@ -158,7 +154,7 @@ def render_navigation(current_page: Optional[str] = None) -> None:
         else:
             if st.button("📊 Research Dashboard", key="nav_dashboard", use_container_width=True):
                 st.session_state.current_page = 'dashboard'
-                st.switch_page("pages/03_Dashboard.py")
+                st.switch_page("pages/02_Dashboard.py")
         
         st.markdown("---")
         

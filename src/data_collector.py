@@ -335,7 +335,8 @@ class DataCollector:
                 'bias_revelation_time': datetime.now().isoformat(),
                 'completion_method': 'full_4stage_protocol',
                 'llm_feedback': safe_get_session_value('llm_feedback', [None]*4),
-                'data_quality_assessment': self._validate_session_quality(experimental_session),
+                'llm_feedback_per_stage': [f.get('llm_feedback') for f in safe_get_session_value('stage_feedback', [None]*4)],
+            'data_quality_assessment': self._validate_session_quality(experimental_session),
                 'research_version': '2.0'
             })
             
