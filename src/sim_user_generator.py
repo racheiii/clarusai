@@ -19,25 +19,34 @@ DESIGN:
 import os
 import json
 import random
-import uuid
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
 import pandas as pd
+import numpy as np
 
 # Import project modules
 from src.llm_feedback import generate_stage_feedback  # 🔄 Injected for tutor feedback
 
-from src.models import UserExpertise, BiasType, Domain, create_experimental_session
+from src.models import UserExpertise, BiasType, Domain
 from src.scoring_engine import calculate_comprehensive_scores
-from config import EXPORTS_DIR, normalize_bias_type, BIAS_KEYWORDS
+from config import EXPORTS_DIR
 
+# Safety fallback for domain mapping
 try:
     from src.models import Domain
     DOMAIN_MAPPING_AVAILABLE = True
 except ImportError:
     DOMAIN_MAPPING_AVAILABLE = False
     print("⚠️ Domain mapping not available - using string values")
+
+def convert_numpy(obj: Any) -> Any:
+    """Convert NumPy types to native Python types for JSON serialization."""
+    if isinstance(obj, (np.floating,)): 
+        return float(obj)
+    if isinstance(obj, (np.integer,)):   
+        return int(obj)
+    return str(obj)
     
 # =============================
 # CONFIGURATION
@@ -448,7 +457,8 @@ class SimulatedUserGenerator:
                                 # Save session file
                                 session_file = output_dir / f"{session_id}.json"
                                 with open(session_file, 'w', encoding='utf-8') as f:
-                                    json.dump(session_data, f, indent=2, ensure_ascii=False)
+                                    json.dump(session_data, f, indent=2, ensure_ascii=False, default=convert_numpy)
+
                                 
                                 generated_sessions.append({
                                     "session_id": session_id,

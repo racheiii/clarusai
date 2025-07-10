@@ -127,13 +127,13 @@ class ScenariosPageController:
             self._handle_critical_error(e)
     
     def _render_compact_navigation(self):
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2 = st.columns([10, 1])
         
         with col1:
             st.markdown("### ClārusAI Training Interface")
         
-        with col3: 
-            if st.button("🏠 Return Home", key="nav_home", help="Return to main menu"):
+        with col2: 
+            if st.button("🏠", key="nav_home", help="Return to main menu"):
                 # Show confirmation dialog
                 self._show_navigation_confirmation()
 
