@@ -342,7 +342,7 @@ class SimulatedUserGenerator:
                 "response_text": response_text,
                 "response_time_seconds": response_time,
                 "cumulative_time_seconds": cumulative_time,
-                "guidance_requested": guidance_used,
+                "guidance_requested": bool(guidance_used),
                 "word_count": len(response_text.split()),
                 "character_count": len(response_text),
                 "quality_level": "high" if len(response_text.split()) >= 40 else "mid" if len(response_text.split()) >= 20 else "low",
@@ -364,14 +364,8 @@ class SimulatedUserGenerator:
                 # Experimental condition
                 "user_expertise": expertise.value,
                 "ai_assistance_enabled": ai_assistance,
-                "bias_type": {
-                    "enum": bias_type.value,
-                    "csv": scenario_dict['bias_type']
-                },
-                "domain": {
-                    "enum": Domain(scenario_dict['domain'].lower()).value if isinstance(scenario_dict['domain'], str) else str(scenario_dict['domain']),
-                    "csv": scenario_dict['domain']
-                },
+                "bias_type": scenario_dict['bias_type'],
+                "domain": scenario_dict['domain'],
                 "scenario_id": scenario_dict['scenario_id'],
                 
                 # Session analytics

@@ -184,8 +184,8 @@ def load_simulation_dataset(simulation_folder: str) -> Optional[pd.DataFrame]:
                         # Experimental factors (2×2×3 design)
                         "user_expertise": session_meta.get("user_expertise", "unknown"),
                         "ai_assistance_enabled": session_meta.get("ai_assistance_enabled", False),
-                        "bias_type": session_meta.get("bias_type", "unknown"),
-                        "domain": session_meta.get("domain", "unknown"),
+                        "bias_type": session_meta.get("bias_type", {}).get("csv") if isinstance(session_meta.get("bias_type"), dict) else session_meta.get("bias_type", "unknown"),
+                        "domain": session_meta.get("domain", {}).get("csv") if isinstance(session_meta.get("domain"), dict) else session_meta.get("domain", "unknown"),
                         "scenario_id": session_meta.get("scenario_id", "unknown"),
                         "condition_code": experimental_meta.get("condition_code", "unknown"),
                         
@@ -302,19 +302,28 @@ def extract_quality_flags(scores: Dict) -> Dict:
         "high_similarity_risk": False,
         "scoring_error": False
     }
-    
+
     if not scores:
         return default_flags
-    
+
     if "error" in scores:
         default_flags["scoring_error"] = True
         return default_flags
-    
+
     confidence_flags = scores.get("confidence_flags", {})
-    if isinstance(confidence_flags, dict):
-        default_flags["low_effort_flag"] = confidence_flags.get("low_effort", False)
-        default_flags["high_similarity_risk"] = confidence_flags.get("high_similarity_risk", False)
     
+    # Extra protection to avoid nested lists, strings, or weird values
+    def safe_bool(value):
+        if isinstance(value, str) and value.lower() in {"true", "false"}:
+            return value.lower() == "true"
+        if isinstance(value, (int, float, bool)):
+            return bool(value)
+        return False
+
+    if isinstance(confidence_flags, dict):
+        default_flags["low_effort_flag"] = safe_bool(confidence_flags.get("low_effort", False))
+        default_flags["high_similarity_risk"] = safe_bool(confidence_flags.get("high_similarity_risk", False))
+
     return default_flags
 
 def get_available_simulations() -> List[str]:
@@ -791,7 +800,33 @@ def main():
                 
                 # Factorial analysis
                 st.subheader("🔬 2×2×3 Factorial Analysis")
-                factorial_results = analyze_factorial_effects(df)
+                # Analyze factorial effects and sanitize tuple keys for JSON compatibility
+                raw_factorial_results = analyze_factorial_effects(df)
+
+                # Flatten any tuple keys into strings before export
+                # Clean both levels of tuple keys in nested factorial_means
+                factorial_means_clean = {}
+
+                raw_means = raw_factorial_results.get("factorial_means", {})
+
+                for outer_key, inner_dict in raw_means.items():
+                    outer_label = " → ".join(map(str, outer_key)) if isinstance(outer_key, tuple) else str(outer_key)
+                    cleaned_inner = {
+                        " → ".join(map(str, k)) if isinstance(k, tuple) else str(k): v
+                        for k, v in inner_dict.items()
+                    }
+                    factorial_means_clean[outer_label] = cleaned_inner
+
+
+                sample_sizes_clean = {
+                    " → ".join(map(str, k)) if isinstance(k, tuple) else str(k): v
+                    for k, v in raw_factorial_results.get("sample_sizes", {}).items()
+                }
+
+                factorial_results = {
+                    "factorial_means": factorial_means_clean,
+                    "sample_sizes": sample_sizes_clean
+                }
                 
                 if PLOTTING_AVAILABLE and make_subplots is not None and go is not None:
                     factorial_fig = create_factorial_visualization(df)
@@ -822,7 +857,7 @@ def main():
                 st.warning("⚠️ Please select a dataset in Tab 1 first.")
             else:
                 df = st.session_state['current_dataset']
-                
+
                 # Scoring distribution analysis
                 st.subheader("📊 Scoring Distribution Analysis")
                 
@@ -840,7 +875,7 @@ def main():
                 col1.metric("Scoring Success Rate", f"{scoring_success_rate:.1f}%")
                 col2.metric("Scoring Errors", scoring_errors)
                 col3.metric("Low Effort Flags", df["low_effort_flag"].sum())
-                col4.metric("High Similarity Flags", df["high_similarity_risk"].sum())
+                col4.metric("High Similarity Flags", df["high_similarity_risk"].astype(bool).sum())
                 
                 if PLOTTING_AVAILABLE and px is not None:
                     # Scoring correlation matrix
@@ -1025,7 +1060,30 @@ def main():
                     
                     # Calculate comprehensive summary
                     stats = calculate_basic_statistics(df)
-                    factorial_results = analyze_factorial_effects(df)
+                    raw_factorial_results = analyze_factorial_effects(df)
+
+                    # Clean both levels of tuple keys
+                    factorial_means_clean = {}
+                    raw_means = raw_factorial_results.get("factorial_means", {})
+
+                    for outer_key, inner_dict in raw_means.items():
+                        outer_label = " → ".join(map(str, outer_key)) if isinstance(outer_key, tuple) else str(outer_key)
+                        cleaned_inner = {
+                            " → ".join(map(str, k)) if isinstance(k, tuple) else str(k): v
+                            for k, v in inner_dict.items()
+                        }
+                        factorial_means_clean[outer_label] = cleaned_inner
+
+                    sample_sizes_clean = {
+                        " → ".join(map(str, k)) if isinstance(k, tuple) else str(k): v
+                        for k, v in raw_factorial_results.get("sample_sizes", {}).items()
+                    }
+
+                    factorial_results = {
+                        "factorial_means": factorial_means_clean,
+                        "sample_sizes": sample_sizes_clean
+                    }
+
                     hypothesis_results = test_research_hypotheses(df)
                     
                     summary_report = {
@@ -1044,7 +1102,7 @@ def main():
                             "total_conditions": 12
                         }
                     }
-                    
+
                     summary_json = json.dumps(summary_report, indent=2, default=str).encode('utf-8')
                     st.download_button(
                         label="📈 Download Statistical Summary",
