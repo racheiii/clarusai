@@ -12,12 +12,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # AI API Configuration
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-API_ENABLED = bool(GEMINI_API_KEY and GEMINI_API_KEY.strip() and GEMINI_API_KEY not in ['None', 'none', 'null'])
 
 # Warning if API not configured
-if not API_ENABLED:
-    print("⚠️  GEMINI_API_KEY not configured - AI guidance features disabled")
 
 # Application Settings
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
@@ -178,36 +174,6 @@ PERSONAS = {
     }
 }
 
-# Gemini API Configuration
-GEMINI_CONFIG = {
-    "model": "models/gemini-1.5-pro-latest",  # ✅ Fully-qualified model ID
-    "generation_config": {
-        "temperature": 0.7,
-        "top_p": 0.8,
-        "top_k": 40,
-        "max_output_tokens": 512,
-        "candidate_count": 1,
-    },
-    "safety_settings": [
-        {
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-            "category": "HARM_CATEGORY_HATE_SPEECH", 
-            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-        }
-    ]
-}
-
 # Session Management Configuration
 SESSION_CONFIG = {
     "recovery_window_hours": int(os.getenv("RECOVERY_WINDOW_HOURS", "6")),
@@ -305,7 +271,7 @@ def validate_config():
         Dict[str, bool]: Validation results for each configuration section
     """
     validations = {
-        "api_configured": API_ENABLED,
+        
         "bias_keywords_complete": all(
             len(keywords) >= 10 for keywords in BIAS_KEYWORDS.values()
         ),
@@ -335,7 +301,7 @@ def get_config_summary():
         Dict[str, Any]: Summary of current configuration state
     """
     return {
-        "api_status": "configured" if API_ENABLED else "not_configured",
+        "api_status": "not_applicable",
         "bias_keyword_counts": {bias: len(keywords) for bias, keywords in BIAS_KEYWORDS.items()},
         "scoring_thresholds": SCORING_THRESHOLDS,
         "quality_thresholds": QUALITY_THRESHOLDS,
@@ -475,3 +441,8 @@ METACOGNITIVE_TERMS = [
     "I deliberated", "I contemplated", "I reassessed"
 ]
 
+OLLAMA_CONFIG = {
+    "model": "llama3",
+    "temperature": 0.7,
+    "max_tokens": 200
+}

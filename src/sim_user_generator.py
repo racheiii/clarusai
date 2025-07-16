@@ -205,41 +205,57 @@ class SimulatedUserGenerator:
         
         return matching_scenarios.sample(n=1).iloc[0]
     
-    def generate_realistic_response(self, expertise: UserExpertise, stage: int, 
-                                  scenario_context: str, ai_assistance: bool) -> Tuple[str, float]:
+
+    def generate_llama3_response(self, scenario: dict, stage: int, expertise: UserExpertise, ai_assistance: bool) -> Tuple[str, float]:
         """
-        Generate realistic response with appropriate variation.
-        
-        Returns:
-            Tuple[str, float]: (response_text, simulated_response_time_seconds)
+        Generates a realistic response using LLaMA3 via Ollama based on scenario, stage, and experimental condition.
+        Replaces template-based generation with prompt-based LLM reasoning.
         """
-        expertise_key = expertise.value  # "novice" or "expert"
-        templates = RESPONSE_TEMPLATES[expertise_key]
-        
-        # Generate response components
-        opening = random.choice(templates["openings"])
-        reasoning = random.choice(templates["reasoning_patterns"])
-        stage_content = STAGE_SPECIFIC_CONTENT[stage][expertise_key]
-        conclusion = random.choice(templates["conclusions"])
-        
-        # Add AI assistance influence for AI-assisted users
-        ai_influence = ""
-        if ai_assistance and random.random() < 0.4:  # 40% chance of AI influence
-            ai_influence = " Following systematic analysis principles, "
-        
-        # Construct response
-        response = f"{opening} {stage_content} {ai_influence}{reasoning}, {conclusion}"
-        
-        # Add realistic variation
-        if random.random() < 0.3:  # 30% chance of additional detail
-            extra_detail = self._generate_extra_detail(expertise, stage)
-            response += f" {extra_detail}"
-        
-        # Simulate realistic response timing
+        import subprocess
+
+        # Map stage to prompt field
+        stage_prompts = [
+            "primary_prompt", "follow_up_1", "follow_up_2", "follow_up_3"
+        ]
+        stage_names = [
+            "Primary Analysis", "Cognitive Factors", "Mitigation Strategies", "Transfer Learning"
+        ]
+
+        prompt_field = stage_prompts[stage]
+        stage_name = stage_names[stage]
+        domain = scenario.get("domain", "unspecified")
+        scenario_text = scenario.get("scenario_text", "")
+        stage_prompt = scenario.get(prompt_field, "")
+
+        # Build prompt dynamically based on condition
+        expertise_str = "novice" if expertise == UserExpertise.NOVICE else "expert"
+        ai_note = "You have access to AI guidance if needed." if ai_assistance else "You are working without any AI assistance."
+
+        # This prompt will be passed to LLaMA3 via Ollama
+        full_prompt = (
+            f"You are a {expertise_str} professional operating in the {domain} domain.\n\n"
+            f"Scenario:\n{scenario_text}\n\n"
+            f"Task ({stage_name}):\n{stage_prompt}\n\n"
+            f"{ai_note}\n"
+            "Please respond in 3–5 sentences. Use your own reasoning. Do NOT mention any cognitive biases by name."
+        )
+
+        # Run Ollama subprocess
+        try:
+            result = subprocess.run(
+                ["ollama", "run", "llama3"],
+                input=full_prompt.encode(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            response = result.stdout.decode().strip()
+        except Exception as e:
+            response = "⚠️ Ollama generation failed."
+
+        # Simulate realistic timing (slightly faster per stage)
         base_time = 45 if expertise == UserExpertise.EXPERT else 30
-        variation = random.uniform(0.7, 1.5)
-        response_time = base_time * variation * (stage + 1) * 0.8  # Stages get slightly faster
-        
+        response_time = base_time * (stage + 1) * 0.85
+
         return response, response_time
     
     def _generate_extra_detail(self, expertise: UserExpertise, stage: int) -> str:
@@ -298,9 +314,9 @@ class SimulatedUserGenerator:
         cumulative_time = 0
         
         for stage in range(STAGE_COUNT):
-            # Generate response
-            response_text, response_time = self.generate_realistic_response(
-                expertise, stage, scenario_dict['scenario_text'], ai_assistance
+            # Generate the response using LLaMA3 via Ollama
+            response_text, response_time = self.generate_llama3_response(
+                scenario_dict, stage, expertise, ai_assistance
             )
             
             cumulative_time += response_time

@@ -2,14 +2,12 @@
 ClārusAI: AI Guidance and Assistance System
 UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
-src/ai_guidance.py - Gemini API integration and guidance generation
+src/ai_guidance.py – Local AI guidance generation via LLaMA3 (Ollama)
 
 Purpose:
-Provides AI assistance for experimental conditions while maintaining
-bias-blind methodology and tracking AI dependency patterns.
-
-Author: Rachel Seah
-Date: July 2025
+Provides locally generated, bias-blind AI guidance to support user decision-making
+under uncertainty across staged reasoning tasks. Replaces prior Gemini-based system
+with a fully reproducible, offline-compatible architecture using open-source models.
 """
 
 import streamlit as st
@@ -18,18 +16,8 @@ import logging
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 
-import config
 from src.session_manager import safe_get_session_value, safe_set_session_value
-
-# Import Gemini API
-try:
-    import google.generativeai as genai
-    from google.generativeai.generative_models import GenerativeModel
-    GEMINI_API_AVAILABLE = True
-except ImportError:
-    GEMINI_API_AVAILABLE = False
-    genai = None
-    GenerativeModel = None
+import subprocess
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -56,40 +44,10 @@ class AIGuidance:
             3: "Consider how these principles apply to other domains. What patterns do you see across different contexts?"
         }
         
-        # Track API status
-        self._update_api_status()
-    
-    def _update_api_status(self) -> None:
-        """Update API configuration status."""
-        if not GEMINI_API_AVAILABLE or not config.GEMINI_API_KEY:
-            safe_set_session_value('api_status', 'unavailable')
-            self.api_configured = False
-        else:
-            self.api_configured = self._configure_gemini_api()
-    
-    def _configure_gemini_api(self) -> bool:
-        """
-        Configure Gemini API with safety settings.
-        
-        Academic Purpose: Establishes reliable AI assistance while
-        tracking API availability for research data quality.
-        """
-        try:
-            # Configure API key
-            if config.GEMINI_API_KEY is not None:
-                os.environ["GOOGLE_API_KEY"] = config.GEMINI_API_KEY
-                safe_set_session_value('api_status', 'configured')
-                logger.info("Gemini API configured successfully")
-                return True
-            else:
-                safe_set_session_value('api_status', 'error')
-                logger.error("Gemini API key is None")
-                return False
-            
-        except Exception as e:
-            safe_set_session_value('api_status', 'error')
-            logger.error(f"Gemini API configuration failed: {e}")
-            return False
+        # Track API status for compatibility (no external API needed)
+        self.api_configured = True  # Always true for local Ollama setup
+        safe_set_session_value('api_status', 'configured')  # Mark AI as ready
+
     
     def get_guidance(self, scenario: Dict[str, Any], current_stage: int, 
                     previous_responses: str = "") -> Tuple[str, bool]:
@@ -114,8 +72,8 @@ class AIGuidance:
             return self._get_fallback_guidance(current_stage), False
         
         try:
-            # Generate guidance using Gemini API
-            guidance_text = self._generate_gemini_guidance(scenario, current_stage, previous_responses)
+            # Generate guidance using local LLaMA3 model via Ollama
+            guidance_text = self._generate_ollama_guidance(scenario, current_stage, previous_responses)
             
             # Update API status to active
             safe_set_session_value('api_status', 'active')
@@ -124,7 +82,7 @@ class AIGuidance:
             return guidance_text, True
             
         except Exception as e:
-            logger.error(f"Gemini API error: {e}")
+            logger.error(f"Ollama guidance generation error: {e}")
             safe_set_session_value('api_status', 'error')
             
             # Log error for research analysis
@@ -133,93 +91,7 @@ class AIGuidance:
             # Return fallback guidance
             return self._get_fallback_guidance(current_stage), False
     
-    def _generate_gemini_guidance(self, scenario: Dict[str, Any], 
-                                 current_stage: int, previous_responses: str) -> str:
-        """Generate guidance using Gemini API."""
-        
-        # Ensure GenerativeModel is available
-        if GenerativeModel is None:
-            raise RuntimeError("Gemini API is not available or not properly installed.")
-        
-        # Initialize model with research configuration
-        model = GenerativeModel(
-            model_name=config.GEMINI_CONFIG["model"],
-            generation_config=config.GEMINI_CONFIG["generation_config"],
-            safety_settings=config.GEMINI_CONFIG["safety_settings"]
-        )
-        
-        # Stage-specific guidance contexts
-        stage_contexts = {
-            0: "initial analysis and decision-making under uncertainty",
-            1: "cognitive factors and mental processes that influence professional judgment", 
-            2: "systematic strategies to improve decision quality and reduce errors",
-            3: "cross-domain application of decision-making principles"
-        }
-        
-        context = stage_contexts.get(current_stage, "decision-making")
-        domain_raw = scenario.get('domain', 'professional')
-        domain = domain_raw.value.lower() if hasattr(domain_raw, "value") else str(domain_raw).lower()
-
-        scenario_text = scenario.get('scenario_text', 'A professional decision-making scenario')
-        
-        # Construct bias-neutral prompt
-        prompt = f"""You are providing educational guidance to a professional working through a {domain} scenario involving {context}.
-
-        ### Scenario Context:
-        {scenario_text}
-
-        ### Current Stage:
-        Stage {current_stage + 1} of 4 in a progressive decision-making analysis.
-
-        ### Previous User Responses:
-        {previous_responses if previous_responses else "This is their first response"}
-
-        ---
-
-        ### ⚠️ CRITICAL INSTRUCTION – BIAS-BLIND REQUIREMENT
-
-        This is part of an academic research experiment where **the specific type of cognitive bias must remain hidden from the user**.
-
-        Your guidance must STRICTLY follow these rules:
-        1. **DO NOT mention or refer to cognitive biases by name.** (e.g. "confirmation bias", "anchoring bias", "availability heuristic")
-        2. **Avoid** the terms: "confirmation", "anchoring", "availability", even if they seem helpful.
-        3. If you wish to allude to flawed reasoning, use **general phrasing only**, such as:
-        - "be cautious of initial impressions"
-        - "ensure you seek out multiple perspectives"
-        - "avoid relying only on vivid or memorable examples"
-        4. If you break this rule, it may invalidate the experimental condition. The user should never know which bias is being studied.
-
-        ---
-
-        ### Your Task:
-        Provide 1–2 short sentences of helpful, educational guidance that:
-        - Encourages general critical thinking and reasoning strategies
-        - Uses neutral, bias-blind language
-        - Suggests frameworks or mental checks for improving decision quality
-        - Is academically appropriate for professionals
-        - Avoids naming or hinting at any specific bias
-
-        ### Output Format:
-        Keep your response concise, under 100 words, without using bullet points or bias names.
-        """
-        
-        # Generate response
-        response = model.generate_content(prompt)
-
-        # ============ Bias Leak Protection ============ #
-        # Ensure Gemini feedback does not mention specific biases
-        leak_terms = ["confirmation bias", "anchoring bias", "availability heuristic", 
-                    "confirmation", "anchoring", "availability"]
-
-        guidance_text = response.text
-        for leak_term in leak_terms:
-            if leak_term.lower() in guidance_text.lower():
-                logger.warning(f"⚠️ Bias leak detected in AI response: term '{leak_term}' found.")
-                guidance_text += "\n\n[⚠️ Warning: This feedback may unintentionally reference the bias being tested. Please disregard any direct mention.]"
-                break
-        # ============================================== #
-
-        return guidance_text
+    
     
     def _get_fallback_guidance(self, current_stage: int) -> str:
         """Get fallback guidance when API unavailable."""
@@ -395,9 +267,35 @@ class AIGuidance:
     def get_api_status(self) -> Dict[str, Any]:
         """Get comprehensive API status for debugging."""
         return {
-            'gemini_available': GEMINI_API_AVAILABLE,
-            'api_key_configured': bool(config.GEMINI_API_KEY),
+            'ollama_active': True,
+            'api_key_configured': False,
             'api_configured': self.api_configured,
             'current_status': safe_get_session_value('api_status', 'unknown'),
             'fallback_prompts_available': len(self.fallback_prompts) == 4
         }
+    def _generate_ollama_guidance(self, scenario: Dict[str, Any], current_stage: int, previous_responses: str) -> str:
+        """Generate bias-blind guidance locally using LLaMA3 via Ollama."""
+        stage_contexts = {
+            0: "initial analysis and decision-making under uncertainty",
+            1: "cognitive factors and mental processes that influence professional judgment",
+            2: "systematic strategies to improve decision quality and reduce errors",
+            3: "cross-domain application of decision-making principles"
+        }
+        context = stage_contexts.get(current_stage, "decision-making")
+        domain_raw = scenario.get('domain', 'professional')
+        domain = domain_raw.value.lower() if hasattr(domain_raw, "value") else str(domain_raw).lower()
+        scenario_text = scenario.get('scenario_text', 'A professional decision-making scenario')
+
+        prompt = (
+            f"You are providing educational guidance to a professional working through a {domain} scenario involving {context}.\n\n"
+            f"### Scenario Context:\n{scenario_text}\n\n"
+            f"### Current Stage:\nStage {current_stage + 1} of 4 in a progressive decision-making analysis.\n\n"
+            f"### Previous User Responses:\n{previous_responses if previous_responses else 'This is their first response'}\n\n"
+            "Write a 1–2 sentence response. Start with one positive insight, then one area for improvement.\n"
+            "Avoid naming cognitive biases (e.g., confirmation bias, anchoring). Keep tone professional and bias-blind.\n"
+        )
+
+        result = subprocess.run(["ollama", "run", "llama3"], input=prompt.encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        guidance_text = result.stdout.decode().strip()
+
+        return guidance_text if guidance_text else "⚠️ No guidance generated."
