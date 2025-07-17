@@ -65,9 +65,7 @@ ClarusAI/
 ├── src/
 
 │   ├── models.py                      # Data classes (Scenario, Response, Persona, ExperimentCondition)
-
-│   ├── claude_service.py              # Claude API integration & persona-based response generation
-
+|
 │   ├── scoring_engine.py              # 6-dimensional assessment algorithms (similarity, originality, bias recognition, etc.)
 
 │   ├── research_pipeline.py           # Automated 72-response generation & live statistical validation
@@ -80,14 +78,9 @@ ClarusAI/
 
 │   ├── 01_Scenarios.py             # User training interface with scenario selection & AI assistance toggle
 
-│   ├── 02_Assessment.py           # Live 6-dimensional scoring demonstration & educational feedback
+│   ├── 02_Results.py              # Personal analytics, session summary, research contribution consent
 
-│   ├── 03_Results.py              # Personal analytics, session summary, research contribution consent
-
-│   ├── 04_Dashboard.py            # Research automation control centre & hypothesis testing
-
-│   └── 05_Methodology.py          # Algorithm transparency, validation metrics, reproducibility documentation
-
+│   ├── 03_Dashboard.py            # Research automation control centre & hypothesis testing
 │
 
 └── exports/
@@ -112,4 +105,31 @@ data/scenarios.csv - Your scenario database
 assets/styles/main.css - Styling reference
 requirements.txt - Dependencies context
 
+Purpose 
+Designed to address the central research question: 
+"Does LLM-assisted training in high-stakes decision contexts develop authentic AI literacy and internalized bias mitigation skills, or does it encourage algorithmic dependence and performative compliance?"
+Aligned to the following goals:
+Assess AI Literacy Development: Measure whether users learn to critically evaluate, appropriately utilize, and maintain autonomy when using AI assistance
+Evaluate Learning Authenticity: Distinguish between genuine conceptual understanding and algorithmic mimicry through semantic depth, originality, and transfer measures
+Measure Cognitive Autonomy: Determine whether AI assistance enhances or undermines independent reasoning capabilities in high-stakes contexts
+Validate Automated Assessment: Implement and test computational frameworks for reliably measuring authentic learning vs. surface-level compliance
+Demonstrate Practical Applications: Provide evidence-based insights for designing AI literacy training systems in professional high-stakes environments
+Rather than embedding an open-ended chat interface, the system provides conditional, domain-specific LLM-generated guidance at each reasoning stage. This controlled interaction allows for measurement of user reliance, critical engagement, and learning outcomes, while preserving experimental control over bias exposure
 
+Primary Research Goal
+To investigate whether AI-generated feedback in high-stakes decision-making contexts supports genuine AI literacy and conceptual understanding, or merely encourages superficial compliance and algorithmic dependence in cognitive bias mitigation.
+This project explores: Do users develop authentic AI literacy—understanding when and how to effectively use AI assistance—or do they simply mimic AI outputs without meaningful cognitive engagement?
+System Goals
+The system is designed to evaluate:
+AI Literacy Development: Whether users learn to critically evaluate and appropriately utilize AI assistance
+Cognitive Depth vs. Surface Learning: The difference between genuine understanding and algorithmic mimicry
+Adaptive Decision-Making: Whether AI assistance enhances or undermines independent reasoning capabilities
+Automated Assessment Validity: The reliability of computational methods to measure authentic learning vs. performative compliance
+Transfer and Generalisation: Whether AI-supported learning transfers to novel high-stakes contexts
+Research Questions
+Bias Recognition & AI Literacy: Can users accurately identify cognitive biases in complex scenarios while demonstrating understanding of when AI assistance is appropriate?
+Conceptual Understanding vs. Algorithmic Dependence: Do users show genuine comprehension of bias mitigation principles, or do they exhibit patterns of AI-dependent reasoning?
+Strategic Application: Can users propose reasoned mitigation strategies that demonstrate both domain knowledge and appropriate AI literacy?
+Transfer Learning: Are users able to apply bias mitigation understanding to unfamiliar contexts without relying on AI assistance?
+AI Assistance Impact: Does exposure to LLM feedback enhance authentic learning and AI literacy, or does it promote algorithmic dependence and shallow reasoning?
+Automated Assessment Reliability: Can computational scoring frameworks reliably distinguish between genuine AI literacy/understanding and surface-level algorithmic compliance?

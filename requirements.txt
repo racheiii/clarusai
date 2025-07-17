@@ -1,12 +1,7 @@
 # requirements.txt
-# ClārusAI: AI Literacy Through Cognitive Bias Training
-# UCL Master's Dissertation Dependencies
 
 # Core Streamlit Framework
 streamlit==1.30.0
-
-# AI Integration - Gemini API
-google-generativeai>=0.3.0
 
 # Data Processing & Analysis
 pandas>=2.0.0
