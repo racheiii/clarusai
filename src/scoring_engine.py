@@ -53,6 +53,7 @@ def calculate_semantic_similarity(response: str, ideal_answer: str) -> Tuple[flo
         return 0.0, "invalid"
 
     if not MODEL_LOADED or model is None:
+        print("⚠️ Semantic model not loaded — returning fallback similarity score of 0.0")
         return 0.0, "fallback"
 
     try:
@@ -75,25 +76,35 @@ def calculate_semantic_similarity(response: str, ideal_answer: str) -> Tuple[flo
 
     return similarity, tag
 
+
+
 def detect_bias_recognition(response: str, bias_type: Any) -> Tuple[int, str]:
     if not validate_response(response):
         return 0, "invalid"
 
+    response_lc = response.lower()
     bias_key = safe_enum_str(bias_type).lower()
+
+    # Explicit keyword check (from config)
     keywords = config.BIAS_KEYWORDS.get(bias_key, [])
-    found = [kw for kw in keywords if kw in response.lower()]
-    count = len(found)
+    keyword_hits = [kw for kw in keywords if kw in response_lc]
+
+    # Semantic cue check (soft implicit detection)
+    semantic_patterns = config.SEMANTIC_BIAS_CUES.get(bias_key, [])
+    phrase_hits = [phrase for phrase in semantic_patterns if phrase in response_lc]
+
+    total_hits = len(set(keyword_hits + phrase_hits))
 
     threshold = config.SCORING_THRESHOLDS.get("bias_recognition_min_terms", 2)
 
-    if count >= threshold:
+    if total_hits >= threshold:
         tag = "strong"
-    elif count == 1:
+    elif total_hits == 1:
         tag = "partial"
     else:
         tag = "none"
 
-    return count, tag
+    return total_hits, tag
 
 def measure_originality(response: str, ideal_answer: str) -> Tuple[float, str]:
     if not validate_response(response) or not validate_response(ideal_answer):
