@@ -121,6 +121,23 @@ BIAS_KEYWORDS = {
     ]
 }
 
+# Semantic bias cue patterns used to detect implicit bias recognition in responses
+SEMANTIC_BIAS_CUES = {
+    "confirmation": [
+        "ignored conflicting", "sought evidence", "only looked for supporting", 
+        "focused on confirming", "cherry-picked", "prior belief", "interpreted as support"
+    ],
+    "anchoring": [
+        "initial value", "anchored to", "first estimate", "starting number", 
+        "adjusted from baseline", "fixed to initial", "influenced by original"
+    ],
+    "availability": [
+        "recent events", "media coverage", "vivid memory", "easily recalled", 
+        "emotionally charged", "frequent exposure", "recent experience shaped"
+    ]
+}
+
+
 # Bias Format Conversion Functions
 def normalize_bias_type(bias_type):
     """Convert between CSV format and enum format for bias types."""
