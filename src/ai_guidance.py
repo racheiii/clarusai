@@ -1,6 +1,5 @@
 """
 ClārusAI: AI Guidance and Assistance System
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
 src/ai_guidance.py – Local AI guidance generation via LLaMA3 (Ollama)
 
@@ -17,7 +16,7 @@ from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 
 from src.session_manager import safe_get_session_value, safe_set_session_value
-import subprocess
+from src.llm_utils import generate_ollama_response
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -295,7 +294,6 @@ class AIGuidance:
             "Avoid naming cognitive biases (e.g., confirmation bias, anchoring). Keep tone professional and bias-blind.\n"
         )
 
-        result = subprocess.run(["ollama", "run", "llama3"], input=prompt.encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        guidance_text = result.stdout.decode().strip()
+        guidance_text = generate_ollama_response(prompt)
 
         return guidance_text if guidance_text else "⚠️ No guidance generated."

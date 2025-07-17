@@ -1,6 +1,5 @@
 """
 ClārusAI: Enhanced Simulated User Generator
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
 sim_user_generator.py - Generates controlled synthetic user sessions for 2×2×3 factorial research
 
@@ -47,7 +46,7 @@ def convert_numpy(obj: Any) -> Any:
     if isinstance(obj, (np.integer,)):   
         return int(obj)
     return str(obj)
-    
+ 
 # =============================
 # CONFIGURATION
 # =============================
@@ -211,7 +210,7 @@ class SimulatedUserGenerator:
         Generates a realistic response using LLaMA3 via Ollama based on scenario, stage, and experimental condition.
         Replaces template-based generation with prompt-based LLM reasoning.
         """
-        import subprocess
+        from src.llm_utils import generate_ollama_response
 
         # Map stage to prompt field
         stage_prompts = [
@@ -242,13 +241,7 @@ class SimulatedUserGenerator:
 
         # Run Ollama subprocess
         try:
-            result = subprocess.run(
-                ["ollama", "run", "llama3"],
-                input=full_prompt.encode(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            response = result.stdout.decode().strip()
+            response = generate_ollama_response(full_prompt)
         except Exception as e:
             response = "⚠️ Ollama generation failed."
 

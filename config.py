@@ -1,6 +1,6 @@
 """
 Configuration settings for ClārusAI
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
+
 config.py - Centralises platform-wide constants, thresholds, and API keys
 to ensure reproducibility and integrity in cognitive bias training experiments.
 """

@@ -1195,8 +1195,8 @@ def main():
                     mime="application/json"
                 )
                 
-                # Publication-ready summary
-                st.subheader("📊 Publication-Ready Results Summary")
+                # Summary
+                st.subheader("📊 Results Summary")
                 
                 hypothesis_results = test_research_hypotheses(df)
                 

@@ -1,6 +1,5 @@
 """
 ClārusAI: Enhanced Main Landing Page
-UCL Master's Dissertation - AI Literacy Through Cognitive Bias Training
 """
 
 import streamlit as st

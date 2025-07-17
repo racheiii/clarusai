@@ -1,14 +1,10 @@
 """
 ClārusAI: Data Collection and Persistence System
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
-src/data_collector.py - Comprehensive data collection with 6-dimensional scoring
+src/data_collector.py - Data collection with 6-dimensional scoring
 
 Purpose:
 Handles all data collection, scoring, and persistence operations
-
-Author: Rachel Seah
-Date: July 2025
 """
 
 import streamlit as st

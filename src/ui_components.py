@@ -1,6 +1,5 @@
 """
 ClārusAI: Enhanced User Interface Components
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
 src/ui_components.py - Comprehensive UI components for 4-stage experimental interface
 
@@ -16,8 +15,6 @@ Key Features:
 - Always-visible feedback containers ensuring consistent user experience
 - Enhanced bias revelation with educational content integration
 - Research-grade interaction logging and dependency pattern tracking
-
-Dependencies: streamlit, datetime, typing
 """
 import streamlit as st
 import time

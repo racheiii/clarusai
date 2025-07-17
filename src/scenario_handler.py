@@ -1,15 +1,11 @@
 """
 ClārusAI: Scenario Loading and Selection System
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
 src/scenario_handler.py - Scenario management and balanced selection
 
 Purpose:
 Handles CSV loading, validation, and stratified scenario selection
 for maintaining experimental validity in 2×2×3 factorial design.
-
-Author: Rachel Seah
-Date: July 2025
 """
 
 import pandas as pd

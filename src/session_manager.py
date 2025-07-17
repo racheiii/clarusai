@@ -1,6 +1,5 @@
 """
 ClārusAI: Session State Management System
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
 src/session_manager.py - Comprehensive session state management
 

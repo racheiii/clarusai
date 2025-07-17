@@ -1,7 +1,6 @@
 
 """ 
 ClārusAI: 6-Dimensional Cognitive Bias Assessment Engine
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
 scoring_engine.py - Complete assessment system for authentic AI literacy measurement
 
@@ -21,10 +20,6 @@ Research Framework:
 Statistical Integration:
 All functions return both quantitative scores and qualitative tags for
 comprehensive statistical analysis and real-time educational feedback.
-
-Author: Rachel Seah
-Date: July 2025
-Dependencies: sentence-transformers, scikit-learn, nltk, scipy
 """
 
 from typing import Tuple, Dict, Any, List, cast

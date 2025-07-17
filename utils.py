@@ -1,6 +1,6 @@
 """
 ClārusAI: Enhanced Shared Navigation and Utility Functions
-UCL Master's Dissertation - AI Literacy Through Cognitive Bias Training
+
 utils.py - Reusable navigation and page configuration functions + 4-stage training utilities
 """
 

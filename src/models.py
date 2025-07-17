@@ -1,6 +1,5 @@
 """
 ClārusAI: Data Models for Experimental Session Management
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
 
 models.py - Data structures for 2×2×3 factorial design research
 
@@ -14,9 +13,6 @@ Research Framework:
 - UserResponse: Individual stage response with comprehensive metadata
 - ScoringResults: 6-dimensional assessment outcomes
 - SessionAnalytics: Temporal and behavioral analysis data
-
-Author: Rachel Seah
-Date: July 2025
 """
 
 
