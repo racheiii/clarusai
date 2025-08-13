@@ -1,19 +1,32 @@
 """
-ClārusAI: 4-Stage Cognitive Bias Training Interface
-UCL Master's Dissertation: "Building AI Literacy Through Simulation"
+pages/01_Scenarios.py — Live Demonstration Interface
 
-pages/01_Scenarios.py - Experimental interface
+Purpose:
+Provides the interactive 4-stage scenario interface used in ClārusAI for demonstration
+purposes. While fully functional, this mode is not used in the main dataset generation
+for the research; instead, all analysed data is produced by the automated simulation
+pipeline for consistency and reproducibility.
 
-RESEARCH OBJECTIVE:
-This module implements the core experimental interface for investigating whether 
-LLM-assisted training develops authentic AI literacy or encourages algorithmic dependence.
+Role in Research Pipeline:
+Implements the progressive decision-making sequence for the 2×2×3 factorial design
+(User Expertise × AI Assistance × Bias Type), collecting structured responses across:
+1. Primary Analysis
+2. Cognitive Factors
+3. Mitigation Strategies
+4. Transfer Learning
 
-EXPERIMENTAL DESIGN:
-- 2×2×3 Factorial Design: User Expertise × AI Assistance × Bias Type
-- Progressive 4-Stage Interaction: Primary Analysis → Cognitive Factors → Mitigation Strategies → Transfer Learning
-- Bias-Blind Methodology: Participants unaware of specific bias being tested until completion
-- Comprehensive Data Collection: All interactions logged for 6-dimensional scoring analysis
+Key Features:
+- Bias-blind design: The targeted cognitive bias is revealed only after scenario completion.
+- Modular integration: Uses shared controllers (SessionManager, ScenarioHandler,
+  UIComponents, AIGuidance, DataCollector) to ensure consistent behaviour with
+  simulation mode.
+- Comprehensive logging: Records all user inputs in a structure compatible with the
+  6-dimensional scoring rubric.
+
+This page exists in the submission to illustrate how the experiment could run with
+real participants, complementing the automated simulation-based evaluation.
 """
+
 
 import streamlit as st
 import sys
@@ -30,7 +43,6 @@ import config
 from utils import (
     setup_training_page_config, 
     load_css, 
-    render_training_navigation,
     render_academic_footer
 )
 
@@ -42,7 +54,6 @@ try:
     from src.ui_components import UIComponents
     from src.data_collector import DataCollector
     
-    COMPONENTS_AVAILABLE = True
 except ImportError as e:
     st.error(f"❌ Component modules not available: {e}")
     st.error("Please ensure all src/ modules are available")
@@ -61,7 +72,7 @@ class ScenariosPageController:
     """
     
     def __init__(self):
-        """Initialize controller with all required components."""
+        """Initialize controller with all required components"""
         self.session_manager = SessionManager()
         self.scenario_handler = ScenarioHandler()
         self.ai_guidance = AIGuidance()
@@ -86,15 +97,15 @@ class ScenariosPageController:
             setup_training_page_config("Training Scenarios", "🎯")
             load_css()
 
+            # Demo mode banner
+            st.info("💡 Demo Mode: This interface is for demonstration purposes only. All analysis uses simulated datasets on Dashboard.")
+
             # Validate system configuration
             self._validate_configuration()
 
             # Handle session recovery if needed
             self._handle_session_recovery()
 
-            # ===========================
-            # ✅ OPTIMIZED SCENARIO LOADING
-            # ===========================
             if "cached_scenarios" not in st.session_state:
                 loaded_df = self.scenario_handler.load_scenarios()
                 if loaded_df is not None:
@@ -112,7 +123,7 @@ class ScenariosPageController:
                 st.stop()
 
             # ===========================
-            # 🧭 RENDER ROUTING AND FLOW
+            # RENDER ROUTING AND FLOW
             # ===========================
             self._render_compact_navigation()
             self._route_experimental_flow(scenarios_df)
@@ -148,10 +159,14 @@ class ScenariosPageController:
                 st.rerun()
         with col2:
             if st.button("Return Home", type="primary", use_container_width=True):
-                st.switch_page("Home.py")
+                try:
+                    st.switch_page("Home.py")
+                except AttributeError:
+                    st.session_state['interaction_flow'] = 'setup'
+                    st.rerun()
     
     def _validate_configuration(self):
-        """Validate system configuration for research integrity."""
+        """Validate system configuration for research integrity"""
         
         config_validation = config.validate_config()
         if not all(config_validation.values()):
@@ -161,7 +176,7 @@ class ScenariosPageController:
                 st.write("Configuration Status:", config_validation)
     
     def _handle_session_recovery(self):
-        """Handle session recovery if applicable."""
+        """Handle session recovery if applicable"""
         
         # For now, skip recovery to avoid complexity
         # Can be enhanced later if needed
@@ -170,7 +185,7 @@ class ScenariosPageController:
             safe_set_session_value('recovery_checked', True)
     
     def _route_experimental_flow(self, scenarios_df):
-        """Route user to appropriate experimental phase."""
+        """Route user to appropriate experimental phase"""
         
         current_flow = safe_get_session_value('interaction_flow', 'setup')
         
@@ -195,7 +210,7 @@ class ScenariosPageController:
             st.rerun()
     
     def _render_setup_phase(self, scenarios_df):
-        """Render experimental setup phase."""
+        """Render experimental setup phase"""
         
         success = self.ui_components.render_experimental_setup(
             scenarios_df=scenarios_df,
@@ -210,7 +225,7 @@ class ScenariosPageController:
             st.rerun()
     
     def _render_scenario_phase(self):
-        """Render 4-stage progressive interaction phase."""
+        """Render 4-stage progressive interaction phase"""
         
         experimental_session = safe_get_session_value('experimental_session')
         
@@ -234,7 +249,8 @@ class ScenariosPageController:
         
         if completion_status == 'stage_completed':
             # Advance to next stage or complete
-            if current_stage < 3:
+            TOTAL_STAGES = 4
+            if current_stage < TOTAL_STAGES - 1:
                 safe_set_session_value('current_stage', current_stage + 1)
                 st.rerun()
             else:
@@ -248,7 +264,7 @@ class ScenariosPageController:
             st.rerun()
     
     def _render_completion_phase(self):
-        """Render completion and bias revelation phase."""
+        """Render completion and bias revelation phase"""
         
         experimental_session = safe_get_session_value('experimental_session')
         
@@ -278,30 +294,29 @@ class ScenariosPageController:
             st.switch_page("Home.py")
     
     def _handle_critical_error(self, error):
-        """Handle critical application errors."""
-        
         st.error("❌ A critical error occurred. Please refresh the page and try again.")
-        
-        # Log error for research analysis
         if hasattr(self, 'session_manager'):
             self.session_manager.log_error('critical_application_error', str(error))
+        # Reset potentially corrupted session
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         
         if config.DEBUG:
             st.exception(error)
     
     def _render_debug_interface(self, scenarios_df):
-        """Render development debug interface."""
+        """Render development debug interface"""
         
         with st.expander("🔧 Development Debug Information", expanded=False):
             
             # Session state summary
             st.write("**Session State Summary:**")
             debug_info = {
-                'interaction_flow': safe_get_session_value('interaction_flow'),
-                'current_stage': safe_get_session_value('current_stage'),
-                'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
-                'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
-                'session_id': st.session_state.experimental_session.session_id if st.session_state.experimental_session else None,
+                'interaction_flow': safe_get_session_value('interaction_flow', 'unset'),
+                'current_stage': safe_get_session_value('current_stage', 'unset'),
+                'user_expertise': getattr(safe_get_session_value('user_expertise'), 'value', None),
+                'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled', False),
+                'session_id': getattr(getattr(st.session_state, 'experimental_session', None), 'session_id', None),
                 'api_status': safe_get_session_value('api_status', 'unknown'),
                 'session_errors': len(safe_get_session_value('session_errors', []))
             }

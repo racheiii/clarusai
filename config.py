@@ -1,27 +1,45 @@
 """
-Configuration settings for ClārusAI
+Configuration settings
 
-config.py - Centralises platform-wide constants, thresholds, and API keys
-to ensure reproducibility and integrity in cognitive bias training experiments.
+Central source of constants, thresholds, vocabularies, and paths for reproducible experiments.
+
+Defines:
+- SCORING_THRESHOLDS, WEIGHTS
+- Bias/mitigation/transfer/metacognition vocab
+- Statistical controls (alpha, mimicry SD multiplier)
+- Session & validation settings; paths & logging defaults
+- Model defaults (OLLAMA_CONFIG) and diagnostics (validate_config, get_config_summary)
 """
 
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-# Load environment variables
-load_dotenv()
-
-# AI API Configuration
-
-# Warning if API not configured
+# Load environment variables once
+load_dotenv(find_dotenv(), override=False)
 
 # Application Settings
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-# Research Configuration
+# Research mode flags (mirrors .env.example, with safe defaults)
 ENABLE_RESEARCH_MODE = os.getenv("ENABLE_RESEARCH_MODE", "True").lower() == "true"
+LLM_ENABLED = os.getenv("LLM_ENABLED", "True").lower() == "true"
+
+# App limits
 MAX_RESPONSES_PER_SESSION = int(os.getenv("MAX_RESPONSES_PER_SESSION", "10"))
+
+# Default local model for Ollama
+OLLAMA_CONFIG = {"model": "llama3.2:instruct", "temperature": 0.7, "max_tokens": 200}
+
+STATISTICAL_SIGNIFICANCE_THRESHOLD = 0.05
+MIMICRY_THRESHOLD_SD_MULTIPLIER = 0.5
+
+STATISTICAL_CONFIG = {
+    "significance_threshold": STATISTICAL_SIGNIFICANCE_THRESHOLD,
+    "mimicry_sd_multiplier": MIMICRY_THRESHOLD_SD_MULTIPLIER,
+    "effect_size_thresholds": {"small": 0.2, "medium": 0.5, "large": 0.8},
+    "multiple_comparisons_method": "holm_bonferroni",
+}
 
 # Scoring Algorithm Thresholds
 SCORING_THRESHOLDS = {
@@ -32,14 +50,13 @@ SCORING_THRESHOLDS = {
     "bias_recognition_min_terms": 2
 }
 
-# Bias Recognition Keywords: keyword sets for detecting bias recognition
-# in user responses across different cognitive bias types
+# Bias Recognition Keywords: keyword sets for detecting bias recognition in user responses across different cognitive bias types
 BIAS_KEYWORDS = {
-    # Primary keys matching CSV format (what's in your scenarios.csv)
+    # Primary keys matching CSV format
     "Confirmation": [
         # Core bias terminology
         "confirmation bias", "selective attention", "cherry picking", 
-        "preconceived notions", "confirmation", "bias", "selective",
+        "preconceived notions", "confirmation",
         # Research and evidence terminology
         "contradictory evidence", "disconfirming", "alternative explanations",
         "counter-evidence", "opposing views", "different perspectives",
@@ -136,7 +153,6 @@ SEMANTIC_BIAS_CUES = {
         "emotionally charged", "frequent exposure", "recent experience shaped"
     ]
 }
-
 
 # Bias Format Conversion Functions
 def normalize_bias_type(bias_type):
@@ -254,14 +270,13 @@ VALIDATION_RULES = {
         "scenario_id", "bias_type", "domain", "title", "scenario_text",
         "primary_prompt", "follow_up_1", "follow_up_2", "follow_up_3",
         "ideal_primary_answer", "ideal_answer_1", "ideal_answer_2", "ideal_answer_3",
-        "cognitive_load_level", "ai_appropriateness", "bias_learning_objective", "rubric_focus"
+        "cognitive_load_level", "bias_learning_objective", "rubric_focus"
     ],
     # Match actual CSV values
     "valid_bias_types": ["Confirmation", "Anchoring", "Availability"],
     "valid_domains": ["Medical", "Military", "Emergency"],
     "valid_expertise_levels": ["novice", "expert"],
     "valid_cognitive_loads": ["Low", "Medium", "High"],
-    "valid_ai_appropriateness": ["helpful", "neutral", "unhelpful"]
 }
 
 # Domain Format Conversion Functions
@@ -279,7 +294,7 @@ def normalize_domain(domain):
     }
     return domain_mapping.get(domain, domain)
 
-# Enhanced validation function
+# Validation function
 def validate_config():
     """
     Validate configuration completeness for research integrity.
@@ -445,21 +460,25 @@ GENERAL_TRANSFER_TERMS = [
     "analogous situations", "parallel cases", "similar patterns"
 ]
 
-# Metacognitive Awareness Indicators
-METACOGNITIVE_TERMS = [
-    "I realised", "upon reflection", "I initially thought",
-    "I changed my mind", "in hindsight", "at first",
-    "I questioned", "reconsidered", "as I analysed",
-    "I noticed", "I became aware", "I recognized",
-    "looking back", "on second thought", "I revised",
-    "I corrected", "I adjusted", "I learned",
-    "I discovered", "it occurred to me", "I reflected",
-    "I challenged", "I examined", "I evaluated",
-    "I deliberated", "I contemplated", "I reassessed"
+# Action verbs that indicate transfer intent (used by evaluate_transferability)
+TRANSFER_VERBS = [
+    "apply", "applies", "applying",
+    "adapt", "adapts", "adapting",
+    "generalise", "generalize", "generalising", "generalizing",
+    "translate", "translates", "translating",
+    "extend", "extends", "extending",
+    "use in", "relevant to", "in other contexts", "across domains"
 ]
 
-OLLAMA_CONFIG = {
-    "model": "llama3",
-    "temperature": 0.7,
-    "max_tokens": 200
-}
+# Metacognitive Awareness Indicators
+METACOGNITIVE_TERMS = [
+    "i realised", "i realized", "upon reflection", "i initially thought",
+    "i changed my mind", "in hindsight", "at first",
+    "i questioned", "reconsidered", "as i analysed", "as i analyzed",
+    "i noticed", "i became aware", "i recognized", "i recognised",
+    "looking back", "on second thought", "i revised",
+    "i corrected", "i adjusted", "i learned",
+    "i discovered", "it occurred to me", "i reflected",
+    "i challenged", "i examined", "i evaluated",
+    "i deliberated", "i contemplated", "i reassessed"
+]

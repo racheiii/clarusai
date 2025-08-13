@@ -1,1242 +1,1126 @@
 """
-ClārusAI: Research Dashboard
-UCL MSc Dissertation – Building AI Literacy Through Simulation
+ClārusAI Research Dashboard
 
-02_Dashboard.py – Research analysis interface for simulated data validation,
-and statistical hypothesis testing.
 
-Purpose:
-- Generate and manage simulated experimental datasets
-- Validate 6-dimensional scoring framework reliability  
-- Test core research hypotheses with statistical rigor
-- Export research-ready visualisations and datasets
+02_Dashboard.py — Interface for statistical analysis of simulated experimental datasets
+
+PURPOSE:
+Multi-tab dashboard for RQ-aligned analysis:
+- RQ1: AI vs No-AI reasoning quality comparison  
+- RQ2: Parroting detection via Mimicry Index
+- RQ3: Cross-domain transfer learning evaluation
+- Dataset management and research exports
+
+APPROACH:
+- Welch t-tests with Cohen's d effect sizes
+- Type-safe pandas operations with graceful error handling
+- Plotly visualisations with fallback UI for missing dependencies
+- Reproducible statistical analysis for dissertation findings
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-import os
+from __future__ import annotations
+
+# ================================
+# STANDARD LIBRARY IMPORTS
+# ================================
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 import json
 import sys
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Union, Any
 import traceback
 
-# Add project paths
+# ================================
+# THIRD‑PARTY IMPORTS
+# ================================
+import numpy as np
+import pandas as pd
+import streamlit as st
+
+# Plotting (optional; guarded)
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    PLOTTING_AVAILABLE = True
+except Exception:
+    PLOTTING_AVAILABLE = False
+    px = None  
+    go = None 
+    make_subplots = None  
+
+# ================================
+# LOCAL IMPORTS (PROJECT MODULES)
+# ================================
 src_path = Path(__file__).parent.parent / "src"
 sys.path.append(str(src_path))
 root_path = Path(__file__).parent.parent
 sys.path.append(str(root_path))
 
-# Import project modules
-import config
-from utils import load_css, render_academic_footer
+import config 
+from utils import load_css, render_academic_footer 
 
-# Visualization imports with error handling
 try:
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    import plotly.express as px
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    PLOTTING_AVAILABLE = True
-except ImportError as e:
-    st.error(f"⚠️ Plotting libraries not available: {e}")
-    st.error("Please install: pip install matplotlib seaborn plotly")
-    PLOTTING_AVAILABLE = False
-    # Create dummy objects to prevent unbound variable errors
-    plt = None
-    sns = None
-    px = None
-    go = None
-    make_subplots = None
-
-# Import simulation generator
-try:
-    from sim_user_generator import SimulatedUserGenerator
+    from sim_user_generator import SimulatedUserGenerator  
     SIMULATION_AVAILABLE = True
-except ImportError:
+except Exception:
     try:
-        from src.sim_user_generator import SimulatedUserGenerator
+        from src.sim_user_generator import SimulatedUserGenerator 
         SIMULATION_AVAILABLE = True
-    except ImportError:
+    except Exception:  
+        SimulatedUserGenerator = None  
         SIMULATION_AVAILABLE = False
-        SimulatedUserGenerator = None
 
 # ================================
-# CONFIGURATION
+# CONFIGURATION & CONSTANTS
 # ================================
+EXPORTS_DIR: Path = Path(getattr(config, "EXPORTS_DIR", "exports")) / "simulated_datasets"
+CHART_EXPORT_DIR: Path = Path(getattr(config, "EXPORTS_DIR", "exports")) / "research_outputs"
+DATA_DIR: Path = Path(getattr(config, "DATA_DIR", "data"))
 
-# Use project configuration
-EXPORTS_DIR = Path(config.EXPORTS_DIR) / "simulated_datasets"
-CHART_EXPORT_DIR = Path(config.EXPORTS_DIR) / "research_outputs"
-DATA_DIR = Path(config.DATA_DIR)
+# Statistical controls (centralised)
+STATISTICAL_SIGNIFICANCE_THRESHOLD: float = float(
+    getattr(config, "STATISTICAL_SIGNIFICANCE_THRESHOLD", 0.05)
+)
+MIMICRY_SD_MULTIPLIER: float = float(
+    getattr(config, "MIMICRY_THRESHOLD_SD_MULTIPLIER", 0.5)
+)
 
 # Ensure directories exist
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 CHART_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Research parameters
-STATISTICAL_SIGNIFICANCE_THRESHOLD = 0.05
-EFFECT_SIZE_THRESHOLDS = {"small": 0.2, "medium": 0.5, "large": 0.8}
-
 # ================================
-# UTILITY FUNCTIONS
+# NUMERIC SAFETY HELPERS
 # ================================
 
-def safe_numeric_operation(value1: Any, value2: Any, operation: str) -> float:
-    """Safely perform numeric operations with type conversion."""
-    try:
-        # Convert to numeric values
-        num1 = float(pd.to_numeric(value1, errors='coerce'))
-        num2 = float(pd.to_numeric(value2, errors='coerce'))
-        
-        # Check for NaN values
-        if pd.isna(num1) or pd.isna(num2):
-            return 0.0
-        
-        # Perform operation
-        if operation == "add":
-            return num1 + num2
-        elif operation == "subtract":
-            return num1 - num2
-        elif operation == "divide":
-            return num1 / num2 if num2 != 0 else 0.0
-        elif operation == "multiply":
-            return num1 * num2
-        else:
-            return 0.0
-            
-    except (ValueError, TypeError, ZeroDivisionError):
-        return 0.0
+def to_numeric_series(s: pd.Series) -> pd.Series:
+    """Convert a Series to numeric and drop NaNs.
 
-def safe_variance_calculation(series: pd.Series) -> float:
-    """Safely calculate variance with proper type handling."""
-    try:
-        # Convert to numeric and drop NaN values
-        numeric_series = pd.to_numeric(series, errors='coerce').dropna()
-        
-        if len(numeric_series) == 0:
-            return 0.0
-        
-        # Calculate variance using numpy for type safety
-        return float(np.var(numeric_series, ddof=1))
-        
-    except (ValueError, TypeError):
-        return 0.0
+    Args:
+        s: Input Series (mixed types allowed).
+    Returns:
+        Numeric Series with NaNs removed.
+    """
+    return pd.to_numeric(s, errors="coerce").dropna()
 
-def safe_mean_calculation(series: pd.Series) -> float:
-    """Safely calculate mean with proper type handling."""
-    try:
-        # Convert to numeric and drop NaN values
-        numeric_series = pd.to_numeric(series, errors='coerce').dropna()
-        
-        if len(numeric_series) == 0:
-            return 0.0
-        
-        return float(numeric_series.mean())
-        
-    except (ValueError, TypeError):
+
+def safe_mean(s: pd.Series) -> float:
+    """Return mean of a Series safely (0.0 if empty)."""
+    s2 = to_numeric_series(s)
+    return float(s2.mean()) if len(s2) else 0.0
+
+def cohens_d(x: pd.Series, y: pd.Series) -> float:
+    """Compute Cohen's d for two independent samples (safe).
+
+    Returns 0.0 if inputs are empty or pooled SD is zero.
+    """
+    x2, y2 = to_numeric_series(x), to_numeric_series(y)
+    if not len(x2) or not len(y2):
         return 0.0
+    sx2 = float(np.var(x2, ddof=1)) if len(x2) > 1 else 0.0
+    sy2 = float(np.var(y2, ddof=1)) if len(y2) > 1 else 0.0
+    denom_n = (len(x2) + len(y2) - 2)
+    sp = np.sqrt(((len(x2) - 1) * sx2 + (len(y2) - 1) * sy2) / denom_n) if denom_n > 0 else 0.0
+    if sp == 0:
+        return 0.0
+    return float((x2.mean() - y2.mean()) / sp)
 
 # ================================
-# DATA LOADING FUNCTIONS
+# DATA LOADING & VALIDATION
 # ================================
 
 @st.cache_data(show_spinner=False)
-def load_simulation_dataset(simulation_folder: str) -> Optional[pd.DataFrame]:
-    """Load simulated dataset from specified folder."""
+def _score_stage(response_text: str, ideal_answer: str, scenario: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Compute 6D scores for a single stage response on demand.
+    Cached to avoid recomputation across UI interactions.
+    """
     try:
-        folder_path = EXPORTS_DIR / simulation_folder
-        if not folder_path.exists():
-            st.error(f"Simulation folder not found: {folder_path}")
+        import importlib
+        scoring = importlib.import_module("src.scoring_engine")
+        return scoring.calculate_comprehensive_scores(
+            response=response_text or "",
+            ideal_answer=ideal_answer or "",
+            scenario=scenario or {},
+        )
+    except Exception as e:
+        # Return a structured error; downstream flattening is defensive
+        return {"error": f"scoring_failed: {e}"}
+
+
+@st.cache_data(show_spinner=False)
+def load_simulation_dataset(simulation_folder: str) -> Optional[pd.DataFrame]:
+    """
+    Load a simulation dataset (folder of JSON sessions) into a flat DataFrame.
+
+    Supports two data shapes:
+      1) Sessions where each stage already has 'scores' (legacy datasets)
+      2) Sessions where stages have 'ideal_answer' but no 'scores'
+         -> we compute scores on load using the scoring engine (cached)
+
+    Returns:
+        A stage-level DataFrame or None on failure. All numeric fields are
+        coerced safely; missing values are handled gracefully.
+    """
+    try:
+        # Resolve the dataset folder using a simple, ordered fallback strategy
+        candidates = [
+            EXPORTS_DIR / simulation_folder,                         # if EXPORTS_DIR == .../simulated_datasets
+            (EXPORTS_DIR / "simulated_datasets" / simulation_folder) # if EXPORTS_DIR == .../exports
+        ]
+        folder = next((p for p in candidates if p.exists()), candidates[0])
+
+        if not folder.exists():
+            st.error(f"Simulation folder not found: {folder}")
             return None
-        
-        records = []
-        session_files = list(folder_path.glob("*.json"))
-        
-        if not session_files:
-            st.warning(f"No session files found in {folder_path}")
+
+        files = sorted(folder.glob("*.json"))
+        if not files:
+            st.warning(f"No session files found in {folder}")
             return None
-        
-        # Load each session file
-        for file_path in session_files:
+
+        records: List[Dict[str, Any]] = []
+        for fp in files:
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    session_data = json.load(f)
-                
-                # Extract session metadata
-                session_meta = session_data.get("session_metadata", {})
-                experimental_meta = session_data.get("experimental_metadata", {})
-                
-                # Process stage responses
-                stage_responses = session_data.get("stage_responses", [])
-                
-                for response in stage_responses:
-                    # Combine all metadata into flat record
-                    record = {
-                        # Session identifiers
-                        "session_id": session_meta.get("session_id", "unknown"),
-                        "simulation_version": session_meta.get("simulation_version", "unknown"),
-                        "is_simulated": session_meta.get("is_simulated", True),
-                        
-                        # Experimental factors (2×2×3 design)
-                        "user_expertise": session_meta.get("user_expertise", "unknown"),
-                        "ai_assistance_enabled": session_meta.get("ai_assistance_enabled", False),
-                        "bias_type": session_meta.get("bias_type", {}).get("csv") if isinstance(session_meta.get("bias_type"), dict) else session_meta.get("bias_type", "unknown"),
-                        "domain": session_meta.get("domain", {}).get("csv") if isinstance(session_meta.get("domain"), dict) else session_meta.get("domain", "unknown"),
-                        "scenario_id": session_meta.get("scenario_id", "unknown"),
-                        "condition_code": experimental_meta.get("condition_code", "unknown"),
-                        
-                        # Stage-level data
-                        "stage_number": response.get("stage_number", 0),
-                        "stage_name": response.get("stage_name", "unknown"),
-                        "response_text": response.get("response_text", ""),
-                        "word_count": response.get("word_count", 0),
-                        "character_count": response.get("character_count", 0),
-                        "response_time_seconds": response.get("response_time_seconds", 0),
-                        "guidance_requested": response.get("guidance_requested", False),
-                        
-                        # Session analytics
-                        "total_session_time_minutes": session_meta.get("total_session_time_minutes", 0),
-                        "total_guidance_requests": session_meta.get("total_guidance_requests", 0),
-                        "total_word_count": session_meta.get("total_word_count", 0),
-                        "session_quality": session_meta.get("session_quality", "unknown"),
-                        
-                        # Scoring results (6-dimensional)
-                        **extract_scoring_results(response.get("scores", {})),
-                        
-                        # Quality flags
-                        **extract_quality_flags(response.get("scores", {})),
-                        
-                        # Timestamps
-                        "generated_timestamp": session_meta.get("generated_timestamp", ""),
-                        "stage_timestamp": response.get("timestamp", "")
-                    }
-                    
-                    records.append(record)
-                    
+                with open(fp, "r", encoding="utf-8") as f:
+                    session: Dict[str, Any] = json.load(f)
             except Exception as e:
-                st.warning(f"Failed to load session file {file_path.name}: {e}")
+                st.warning(f"Failed to load {fp.name}: {e}")
                 continue
-        
+
+            meta = session.get("session_metadata", {}) or {}
+            expt = session.get("experimental_metadata", {}) or {}
+            scenario_snapshot = session.get("scenario_data", {}) or {}
+            stages = session.get("stage_responses", []) or []
+
+            # Defensive mapping for bias/domain fields (string or {csv: ...})
+            def _maybe_csv(x: Any) -> Any:
+                return x.get("csv") if isinstance(x, dict) and "csv" in x else x
+
+            for r in stages:
+                # If scores are missing or error-tagged, score on load (cached)
+                scores = r.get("scores")
+                if (not scores) or (isinstance(scores, dict) and scores.get("error")):
+                    scores = _score_stage(
+                        response_text=r.get("response_text", ""),
+                        ideal_answer=r.get("ideal_answer", ""),
+                        scenario=scenario_snapshot,
+                    )
+
+                # Flatten out the stage into a single record (defensive conversions)
+                sem = scores.get("semantic_similarity", {}) if isinstance(scores, dict) else {}
+                bri = scores.get("bias_recognition", {}) if isinstance(scores, dict) else {}
+                org = scores.get("conceptual_originality", {}) if isinstance(scores, dict) else {}
+                mit = scores.get("mitigation_strategy", {}) if isinstance(scores, dict) else {}
+                trn = scores.get("domain_transferability", {}) if isinstance(scores, dict) else {}
+                met = scores.get("metacognitive_awareness", {}) if isinstance(scores, dict) else {}
+                flg = scores.get("confidence_flags", {}) if isinstance(scores, dict) else {}
+
+                record = {
+                    # Identifiers
+                    "session_id": meta.get("session_id", "unknown"),
+                    "simulation_version": meta.get("simulation_version", "unknown"),
+                    "is_simulated": bool(meta.get("is_simulated", True)),
+
+                    # Factors (2×2×3)
+                    "user_expertise": meta.get("user_expertise", "unknown"),
+                    "ai_assistance_enabled": bool(meta.get("ai_assistance_enabled", False)),
+                    "bias_type": _maybe_csv(meta.get("bias_type", "unknown")),
+                    "domain": _maybe_csv(meta.get("domain", "unknown")),
+                    "scenario_id": meta.get("scenario_id", "unknown"),
+                    "condition_code": expt.get("condition_code", "unknown"),
+
+                    # Stage
+                    "stage_number": int(r.get("stage_number", 0) or 0),
+                    "stage_name": r.get("stage_name", "unknown"),
+                    "response_text": r.get("response_text", ""),
+                    "ideal_answer": r.get("ideal_answer", ""),  # for audit/debug
+                    "word_count": int(r.get("word_count", 0) or 0),
+                    "character_count": int(r.get("character_count", 0) or 0),
+                    "response_time_seconds": float(r.get("response_time_seconds", 0) or 0.0),
+                    "guidance_requested": bool(r.get("guidance_requested", False)),
+
+                    # Session analytics
+                    "total_session_time_minutes": float(meta.get("total_session_time_minutes", 0) or 0.0),
+                    "total_guidance_requests": int(meta.get("total_guidance_requests", 0) or 0),
+                    "total_word_count": int(meta.get("total_word_count", 0) or 0),
+                    "session_quality": meta.get("session_quality", "unknown"),
+
+                    # Scores (6-D flattened; safe numeric conversions)
+                    "semantic_similarity": float(sem.get("score", 0.0) or 0.0),
+                    "semantic_tag": sem.get("tag", "unknown"),
+                    "bias_recognition_count": int(bri.get("count", 0) or 0),
+                    "bias_recognition_tag": bri.get("tag", "unknown"),
+                    "originality_score": float(org.get("score", 0.0) or 0.0),
+                    "originality_tag": org.get("tag", "unknown"),
+                    "strategy_count": int(mit.get("count", 0) or 0),
+                    "strategy_tag": mit.get("tag", "unknown"),
+                    "transfer_count": int(trn.get("count", 0) or 0),
+                    "transfer_tag": trn.get("tag", "unknown"),
+                    "metacognition_count": int(met.get("count", 0) or 0),
+                    "metacognition_tag": met.get("tag", "unknown"),
+                    "overall_quality_score": float(scores.get("overall_quality_score", 0.0) or 0.0) if isinstance(scores, dict) else 0.0,
+
+                    # Flags
+                    "low_effort_flag": bool(flg.get("low_effort", False)),
+                    "high_similarity_risk": bool(flg.get("high_similarity_risk", False)),
+                    "scoring_error": bool(isinstance(scores, dict) and ("error" in scores)),
+
+                    # Timestamps
+                    "generated_timestamp": meta.get("generated_timestamp", ""),
+                    "stage_timestamp": r.get("timestamp", ""),
+                }
+                records.append(record)
+
         if not records:
-            st.error("No valid session data found")
+            st.error("No valid session data found in the selected folder.")
             return None
-        
+
         df = pd.DataFrame(records)
-        st.success(f"✅ Loaded {len(df)} responses from {df['session_id'].nunique()} sessions")
+
+        # Light post-validation
+        # Ensure expected columns exist; fill if missing
+        expected_cols = [
+            "overall_quality_score", "semantic_similarity", "originality_score",
+            "bias_recognition_count", "strategy_count", "transfer_count",
+        ]
+        for c in expected_cols:
+            if c not in df.columns:
+                df[c] = np.nan
+
+        st.success(f"✅ Loaded {len(df)} stage responses from {df['session_id'].nunique()} sessions")
         return df
-        
+
     except Exception as e:
         st.error(f"Failed to load simulation dataset: {e}")
         return None
 
-def extract_scoring_results(scores: Dict) -> Dict:
-    """Extract 6-dimensional scores from scoring results."""
-    default_scores = {
-        "semantic_similarity": 0.0,
-        "semantic_tag": "unknown",
-        "bias_recognition_count": 0,
-        "bias_recognition_tag": "unknown", 
-        "originality_score": 0.0,
-        "originality_tag": "unknown",
-        "strategy_count": 0,
-        "strategy_tag": "unknown",
-        "transfer_count": 0,
-        "transfer_tag": "unknown",
-        "metacognition_count": 0,
-        "metacognition_tag": "unknown",
-        "overall_quality_score": 0.0
-    }
-    
-    if not scores or "error" in scores:
-        return default_scores
-    
-    # Extract semantic similarity
-    semantic_data = scores.get("semantic_similarity", {})
-    if isinstance(semantic_data, dict):
-        default_scores["semantic_similarity"] = semantic_data.get("score", 0.0)
-        default_scores["semantic_tag"] = semantic_data.get("tag", "unknown")
-    
-    # Extract bias recognition
-    bias_data = scores.get("bias_recognition", {})
-    if isinstance(bias_data, dict):
-        default_scores["bias_recognition_count"] = bias_data.get("count", 0)
-        default_scores["bias_recognition_tag"] = bias_data.get("tag", "unknown")
-    
-    # Extract originality
-    originality_data = scores.get("conceptual_originality", {})
-    if isinstance(originality_data, dict):
-        default_scores["originality_score"] = originality_data.get("score", 0.0)
-        default_scores["originality_tag"] = originality_data.get("tag", "unknown")
-    
-    # Extract strategy
-    strategy_data = scores.get("mitigation_strategy", {})
-    if isinstance(strategy_data, dict):
-        default_scores["strategy_count"] = strategy_data.get("count", 0)
-        default_scores["strategy_tag"] = strategy_data.get("tag", "unknown")
-    
-    # Extract transfer
-    transfer_data = scores.get("domain_transferability", {})
-    if isinstance(transfer_data, dict):
-        default_scores["transfer_count"] = transfer_data.get("count", 0)
-        default_scores["transfer_tag"] = transfer_data.get("tag", "unknown")
-    
-    # Extract metacognition
-    metacog_data = scores.get("metacognitive_awareness", {})
-    if isinstance(metacog_data, dict):
-        default_scores["metacognition_count"] = metacog_data.get("count", 0)
-        default_scores["metacognition_tag"] = metacog_data.get("tag", "unknown")
-    
-    # Overall score
-    default_scores["overall_quality_score"] = scores.get("overall_quality_score", 0.0)
-    
-    return default_scores
-
-def extract_quality_flags(scores: Dict) -> Dict:
-    """Extract quality flags from scoring results."""
-    default_flags = {
-        "low_effort_flag": False,
-        "high_similarity_risk": False,
-        "scoring_error": False
-    }
-
-    if not scores:
-        return default_flags
-
-    if "error" in scores:
-        default_flags["scoring_error"] = True
-        return default_flags
-
-    confidence_flags = scores.get("confidence_flags", {})
-    
-    # Extra protection to avoid nested lists, strings, or weird values
-    def safe_bool(value):
-        if isinstance(value, str) and value.lower() in {"true", "false"}:
-            return value.lower() == "true"
-        if isinstance(value, (int, float, bool)):
-            return bool(value)
-        return False
-
-    if isinstance(confidence_flags, dict):
-        default_flags["low_effort_flag"] = safe_bool(confidence_flags.get("low_effort", False))
-        default_flags["high_similarity_risk"] = safe_bool(confidence_flags.get("high_similarity_risk", False))
-
-    return default_flags
-
+@st.cache_data(show_spinner=False, ttl=10)
 def get_available_simulations() -> List[str]:
-    """Get list of available simulation folders."""
+    """
+    List available simulation dataset folders (sorted most recent first).
+    Assumes datasets live under exports/simulated_datasets/.
+    """
     try:
-        if not EXPORTS_DIR.exists():
+        base = EXPORTS_DIR if EXPORTS_DIR.name == "simulated_datasets" else (EXPORTS_DIR / "simulated_datasets")
+        if not base.exists():
             return []
-        
-        folders = [
-            f.name for f in EXPORTS_DIR.iterdir() 
-            if f.is_dir() and not f.name.startswith('.')
-        ]
-        return sorted(folders, reverse=True)  # Most recent first
-        
+        folders = [f.name for f in base.iterdir() if f.is_dir() and not f.name.startswith(".")]
+        return sorted(folders, reverse=True)
     except Exception as e:
-        st.error(f"Failed to get simulation folders: {e}")
+        st.error(f"Failed to list simulation folders: {e}")
         return []
 
 # ================================
-# STATISTICAL ANALYSIS FUNCTIONS
+# DESCRIPTIVES & FACTORIAL SUMMARIES
 # ================================
 
-def calculate_basic_statistics(df: pd.DataFrame) -> Dict:
-    """Calculate basic descriptive statistics."""
-    try:
-        stats = {
-            "total_sessions": df["session_id"].nunique(),
-            "total_responses": len(df),
-            "expertise_distribution": df["user_expertise"].value_counts().to_dict(),
-            "ai_assistance_distribution": df["ai_assistance_enabled"].value_counts().to_dict(),
-            "bias_type_distribution": df["bias_type"].value_counts().to_dict(),
-            "domain_distribution": df["domain"].value_counts().to_dict(),
-            "session_quality_distribution": df["session_quality"].value_counts().to_dict(),
-            "average_response_length": safe_mean_calculation(df["word_count"]),
-            "average_session_time": safe_mean_calculation(df["total_session_time_minutes"]),
-            "guidance_usage_rate": safe_mean_calculation(df["guidance_requested"]),
-            "low_effort_rate": safe_mean_calculation(df["low_effort_flag"]),
-            "high_similarity_risk_rate": safe_mean_calculation(df["high_similarity_risk"])
-        }
-        return stats
-    except Exception as e:
-        st.error(f"Error calculating statistics: {e}")
-        return {}
+def compute_descriptives(df: pd.DataFrame) -> Dict[str, Any]:
+    """Compute sample characteristics used on multiple tabs.
 
-def test_research_hypotheses(df: pd.DataFrame) -> Dict:
-    """Test core research hypotheses with statistical analysis - TYPE SAFE VERSION."""
+    Returns a dict for quick JSON export and UI metrics.
+    """
     try:
-        results = {}
-        
-        # H1: AI assistance creates dependency (higher semantic similarity)
-        try:
-            ai_users = df[df["ai_assistance_enabled"] == True]["semantic_similarity"]
-            no_ai_users = df[df["ai_assistance_enabled"] == False]["semantic_similarity"]
-            
-            # Convert to numeric and filter out non-numeric values
-            ai_users_numeric = pd.to_numeric(ai_users, errors='coerce').dropna()
-            no_ai_users_numeric = pd.to_numeric(no_ai_users, errors='coerce').dropna()
-            
-            if len(ai_users_numeric) > 0 and len(no_ai_users_numeric) > 0:
-                try:
-                    from scipy import stats
-                    from typing import Any
-                    
-                    # Perform t-test with type bypass for Pylance
-                    t_test_result: Any = stats.ttest_ind(ai_users_numeric, no_ai_users_numeric)
-                    
-                    # Modern scipy (1.16.0) returns TtestResult object with attributes
-                    try:
-                        # Try modern scipy first (your version)
-                        t_stat: float = float(t_test_result.statistic)
-                        p_value: float = float(t_test_result.pvalue)
-                    except AttributeError:
-                        # Fallback for older scipy (if needed)
-                        t_stat: float = float(t_test_result[0])
-                        p_value: float = float(t_test_result[1])
-                    
-                    # Use safe variance calculation
-                    ai_var = safe_variance_calculation(ai_users_numeric)
-                    no_ai_var = safe_variance_calculation(no_ai_users_numeric)
-                    ai_mean = safe_mean_calculation(ai_users_numeric)
-                    no_ai_mean = safe_mean_calculation(no_ai_users_numeric)
-                    
-                    # Calculate pooled standard deviation safely
-                    pooled_variance = safe_numeric_operation(ai_var, no_ai_var, "add") / 2
-                    pooled_std = np.sqrt(pooled_variance) if pooled_variance > 0 else 0.0
-                    
-                    # Calculate effect size safely
-                    mean_diff = safe_numeric_operation(ai_mean, no_ai_mean, "subtract")
-                    effect_size = mean_diff / pooled_std if pooled_std > 0 else 0.0
-                    
-                    results["h1_ai_dependency"] = {
-                        "hypothesis": "AI assistance increases semantic similarity (dependency)",
-                        "ai_mean": ai_mean,
-                        "no_ai_mean": no_ai_mean,
-                        "difference": mean_diff,
-                        "t_statistic": t_stat,
-                        "p_value": p_value,
-                        "significant": p_value < STATISTICAL_SIGNIFICANCE_THRESHOLD,
-                        "effect_size": effect_size
-                    }
-                except ImportError:
-                    results["h1_ai_dependency"] = {"error": "scipy not available for statistical testing"}
-            else:
-                results["h1_ai_dependency"] = {"error": "Insufficient numeric data for AI dependency test"}
-        except Exception as e:
-            results["h1_ai_dependency"] = {"error": f"Could not test H1: {e}"}
-        
-        # H2: Expert vs Novice differences in AI usage
-        try:
-            expert_guidance = df[df["user_expertise"] == "expert"]["guidance_requested"]
-            novice_guidance = df[df["user_expertise"] == "novice"]["guidance_requested"]
-            
-            # Convert to numeric
-            expert_guidance_numeric = pd.to_numeric(expert_guidance, errors='coerce').dropna()
-            novice_guidance_numeric = pd.to_numeric(novice_guidance, errors='coerce').dropna()
-            
-            if len(expert_guidance_numeric) > 0 and len(novice_guidance_numeric) > 0:
-                expert_mean = safe_mean_calculation(expert_guidance_numeric)
-                novice_mean = safe_mean_calculation(novice_guidance_numeric)
-                
-                results["h2_expertise_difference"] = {
-                    "hypothesis": "Experts and novices differ in AI guidance usage",
-                    "expert_guidance_rate": expert_mean,
-                    "novice_guidance_rate": novice_mean,
-                    "difference": safe_numeric_operation(expert_mean, novice_mean, "subtract")
-                }
-            else:
-                results["h2_expertise_difference"] = {"error": "Insufficient data for expertise comparison"}
-        except Exception as e:
-            results["h2_expertise_difference"] = {"error": f"Could not test H2: {e}"}
-        
-        # H3: Transfer learning effectiveness
-        try:
-            stage_3_transfer = df[df["stage_number"] == 3]["transfer_count"]
-            stage_2_transfer = df[df["stage_number"] == 2]["transfer_count"]
-            
-            # Convert to numeric
-            stage_3_numeric = pd.to_numeric(stage_3_transfer, errors='coerce').dropna()
-            stage_2_numeric = pd.to_numeric(stage_2_transfer, errors='coerce').dropna()
-            
-            if len(stage_3_numeric) > 0 and len(stage_2_numeric) > 0:
-                stage_3_mean = safe_mean_calculation(stage_3_numeric)
-                stage_2_mean = safe_mean_calculation(stage_2_numeric)
-                
-                results["h3_transfer_learning"] = {
-                    "hypothesis": "Transfer learning improves from stage 2 to 3",
-                    "stage_2_mean": stage_2_mean,
-                    "stage_3_mean": stage_3_mean,
-                    "improvement": safe_numeric_operation(stage_3_mean, stage_2_mean, "subtract")
-                }
-            else:
-                results["h3_transfer_learning"] = {"error": "Insufficient data for transfer learning analysis"}
-        except Exception as e:
-            results["h3_transfer_learning"] = {"error": f"Could not test H3: {e}"}
-        
-        return results
-        
-    except Exception as e:
-        st.error(f"Error in hypothesis testing: {e}")
-        return {}
-
-def analyze_factorial_effects(df: pd.DataFrame) -> Dict:
-    """Analyze 2×2×3 factorial design effects."""
-    try:
-        # Group by experimental conditions
-        grouped = df.groupby(["user_expertise", "ai_assistance_enabled", "bias_type"]).agg({
-            "overall_quality_score": ["mean", "std", "count"],
-            "semantic_similarity": "mean",
-            "originality_score": "mean", 
-            "bias_recognition_count": "mean",
-            "strategy_count": "mean",
-            "guidance_requested": "mean"
-        }).round(3)
-        
         return {
-            "factorial_means": grouped.to_dict(),
-            "sample_sizes": df.groupby(["user_expertise", "ai_assistance_enabled", "bias_type"]).size().to_dict()
+            "total_sessions": int(df["session_id"].nunique()),
+            "total_responses": int(len(df)),
+            "expertise_distribution": df["user_expertise"].value_counts(dropna=False).to_dict(),
+            "ai_assistance_distribution": df["ai_assistance_enabled"].value_counts(dropna=False).to_dict(),
+            "bias_type_distribution": df["bias_type"].value_counts(dropna=False).to_dict(),
+            "domain_distribution": df["domain"].value_counts(dropna=False).to_dict(),
+            "session_quality_distribution": df["session_quality"].value_counts(dropna=False).to_dict() if "session_quality" in df else {},
+            "average_response_length": safe_mean(df["word_count"]) if "word_count" in df else 0.0,
+            "average_session_time": safe_mean(df["total_session_time_minutes"]) if "total_session_time_minutes" in df else 0.0,
+            "guidance_usage_rate": safe_mean(df["guidance_requested"]) if "guidance_requested" in df else 0.0,
+            "low_effort_rate": safe_mean(df["low_effort_flag"]) if "low_effort_flag" in df else 0.0,
+            "high_similarity_risk_rate": safe_mean(df["high_similarity_risk"]) if "high_similarity_risk" in df else 0.0,
         }
     except Exception as e:
-        st.error(f"Error in factorial analysis: {e}")
+        st.error(f"Error calculating descriptives: {e}")
         return {}
 
+
+def summarize_factorial(df: pd.DataFrame) -> Dict[str, Any]:
+    """Aggregate key metrics over 2×2×3 factors (expertise × AI × bias)."""
+    try:
+        d = df.copy()
+        if "ai_assistance_enabled" in d.columns:
+            d["ai_assistance_enabled"] = d["ai_assistance_enabled"].astype(bool)
+        if "user_expertise" in d.columns:
+            d["user_expertise"] = pd.Categorical(d["user_expertise"],
+                                                categories=["novice", "expert"],
+                                                ordered=True)
+        if "bias_type" in d.columns:
+            d["bias_type"] = pd.Categorical(d["bias_type"],
+                                            categories=["confirmation", "anchoring", "availability"],
+                                            ordered=True)
+
+        agg = (
+            d.groupby(["user_expertise", "ai_assistance_enabled", "bias_type"]).agg(
+                overall_quality_score=("overall_quality_score", "mean"),
+                semantic_similarity=("semantic_similarity", "mean"),
+                originality_score=("originality_score", "mean"),
+                bias_recognition_count=("bias_recognition_count", "mean"),
+                strategy_count=("strategy_count", "mean"),
+                guidance_requested=("guidance_requested", "mean"),
+                n=("session_id", "count"),
+            )
+        ).reset_index()
+
+        # Ensure stable, readable order in tables/plots
+        agg = agg.sort_values(["bias_type", "user_expertise", "ai_assistance_enabled"],
+                            ascending=[True, True, False])
+        return {"table": agg}
+
+    except Exception as e: 
+        st.error(f"Error in factorial summary: {e}")
+        return {"table": pd.DataFrame()}
+
 # ================================
-# VISUALIZATION FUNCTIONS
+# STATISTICAL TESTING (RQ1–RQ3)
 # ================================
 
-def create_factorial_visualization(df: pd.DataFrame):
-    """Create 2×2×3 factorial design visualization."""
-    if not PLOTTING_AVAILABLE or go is None or make_subplots is None:
-        st.error("Plotting libraries not available")
-        return None
-    
+def ttest_independent(x: pd.Series, y: pd.Series) -> Tuple[float, float]:
+    """Welch t-test returning (t, p).
+
+    Notes:
+      - Assumes independent samples and approximate normality of means
+      - We use SciPy’s Welch test (equal_var=False) to relax homogeneity
+    """
     try:
-        fig = make_subplots(
-            rows=2, cols=2,
-            subplot_titles=("Overall Quality Score", "Originality Score", 
-                          "Bias Recognition", "AI Guidance Usage"),
-            specs=[[{"secondary_y": False}, {"secondary_y": False}],
-                   [{"secondary_y": False}, {"secondary_y": False}]]
-        )
-        
-        # Group data by experimental factors
-        grouped = df.groupby(["user_expertise", "ai_assistance_enabled", "bias_type"]).agg({
-            "overall_quality_score": "mean",
-            "originality_score": "mean",
-            "bias_recognition_count": "mean", 
-            "guidance_requested": "mean"
-        }).reset_index()
-        
-        # Create condition labels
-        grouped["condition"] = grouped["user_expertise"] + "_" + grouped["ai_assistance_enabled"].astype(str)
-        
-        # Add traces for each bias type
-        for i, bias_type in enumerate(grouped["bias_type"].unique()):
-            bias_data = grouped[grouped["bias_type"] == bias_type]
-            
-            # Overall quality
-            fig.add_trace(
-                go.Bar(name=f"{bias_type}", x=bias_data["condition"], y=bias_data["overall_quality_score"],
-                      showlegend=(i==0)), row=1, col=1
-            )
-            
-            # Originality  
-            fig.add_trace(
-                go.Bar(name=f"{bias_type}", x=bias_data["condition"], y=bias_data["originality_score"],
-                      showlegend=False), row=1, col=2
-            )
-            
-            # Bias recognition
-            fig.add_trace(
-                go.Bar(name=f"{bias_type}", x=bias_data["condition"], y=bias_data["bias_recognition_count"],
-                      showlegend=False), row=2, col=1
-            )
-            
-            # Guidance usage
-            fig.add_trace(
-                go.Bar(name=f"{bias_type}", x=bias_data["condition"], y=bias_data["guidance_requested"],
-                      showlegend=False), row=2, col=2
-            )
-        
-        fig.update_layout(height=600, title_text="2×2×3 Factorial Design Results")
-        return fig
-        
+        from scipy import stats 
+    except Exception:
+        if not st.session_state.get("_scipy_warned", False):
+            st.warning("Statistical tests require SciPy. Install with `pip install scipy` for p-values/effect sizes.")
+            st.session_state["_scipy_warned"] = True
+        return 0.0, 1.0
+    from typing import Any
+
+    x2, y2 = to_numeric_series(x), to_numeric_series(y)
+    if not len(x2) or not len(y2):
+        return 0.0, 1.0
+
+    res: Any = stats.ttest_ind(x2, y2, equal_var=False)
+    t = float(getattr(res, "statistic", (res[0] if isinstance(res, (tuple, list, np.ndarray)) else 0.0)))
+    p = float(getattr(res, "pvalue",    (res[1] if isinstance(res, (tuple, list, np.ndarray)) else 1.0)))
+    return t, p
+
+def holm_bonferroni(pvals: Dict[str, float]) -> Dict[str, float]:
+    """
+    Return Holm–Bonferroni adjusted p-values as a dict keyed like input.
+    p_adj[i] = max_{j≤i} min(1, (m−j+1) * p_sorted[j]).
+    """
+    items = [(k, float(v)) for k, v in pvals.items()]
+    m = len(items)
+    items_sorted = sorted(items, key=lambda kv: kv[1])
+    adj_tmp: Dict[str, float] = {}
+    running_max = 0.0
+    for i, (k, p) in enumerate(items_sorted, start=1):
+        factor = m - i + 1
+        p_adj = min(1.0, factor * p)
+        running_max = max(running_max, p_adj)
+        adj_tmp[k] = running_max
+    # map back to original order
+    return {k: adj_tmp[k] for k, _ in items}
+
+def analyze_rq1(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    RQ1 — AI vs No‑AI: Reasoning quality under cognitive bias conditions.
+    Primary: overall_quality_score. Secondary: semantic_similarity, bias_recognition_count.
+    Welch t-tests + Cohen's d. Holm–Bonferroni across metrics.
+    """
+    try:
+        ai = df[df["ai_assistance_enabled"] == True]
+        no_ai = df[df["ai_assistance_enabled"] == False]
+
+        out: Dict[str, Any] = {"n_ai": int(len(ai)), "n_no_ai": int(len(no_ai))}
+        metrics = [m for m in ["overall_quality_score", "semantic_similarity", "bias_recognition_count"] if m in df.columns]
+
+        # raw tests
+        pvals: Dict[str, float] = {}
+        tmp: Dict[str, Dict[str, Any]] = {}
+        for metric in metrics:
+            t, p = ttest_independent(ai[metric], no_ai[metric])
+            d = cohens_d(ai[metric], no_ai[metric])
+            tmp[metric] = {
+                "mean_ai": safe_mean(ai[metric]),
+                "mean_no_ai": safe_mean(no_ai[metric]),
+                "diff": float(safe_mean(ai[metric]) - safe_mean(no_ai[metric])),
+                "t_stat": t,
+                "p_value": p,
+                "effect_size_d": d,
+            }
+            pvals[metric] = p
+
+        # Holm–Bonferroni adjust
+        adj = holm_bonferroni(pvals) if len(pvals) > 1 else {k: v for k, v in pvals.items()}
+
+        # Finalise output with significance flags (raw and adjusted)
+        for metric, res in tmp.items():
+            # Coerce to float so Pylance knows the types are comparable
+            p_raw: float = float(res.get("p_value") or 1.0)
+            p_adj: float = float(adj.get(metric, p_raw))
+
+            # Replace with the coerced values to keep downstream UI consistent
+            res["p_value"] = p_raw
+            res["p_value_adj"] = p_adj
+            res["significant"] = bool(p_raw < STATISTICAL_SIGNIFICANCE_THRESHOLD)
+            res["significant_adj"] = bool(p_adj < STATISTICAL_SIGNIFICANCE_THRESHOLD)
+
+            out[metric] = res
+
+        return out
     except Exception as e:
-        st.error(f"Error creating factorial visualization: {e}")
-        return None
+        return {"error": f"RQ1 evaluation failed: {e}"}
 
-def create_hypothesis_testing_charts(hypothesis_results: Dict):
-    """Create visualizations for hypothesis testing results."""
+def analyze_rq2(df: pd.DataFrame) -> Dict[str, Any]:
+    """RQ2 — Distinguishing parroting from authentic reasoning.
+
+    Computes a Mimicry Index = z(semantic_similarity) − z(originality_score)
+    Higher values suggest greater surface-level mimicry
+    
+    Reports:
+    1. Mimicry risk threshold (mean + k·SD)
+    2. AI vs No-AI group means and risk rates
+    3. Overall similarity–originality correlation (expected negative if metrics diverge)
+    """
+    try:
+        data = df[["semantic_similarity", "originality_score", "ai_assistance_enabled"]].copy()
+        # One-pass coercion keeps indices aligned
+        data["semantic_similarity"] = pd.to_numeric(data["semantic_similarity"], errors="coerce")
+        data["originality_score"]   = pd.to_numeric(data["originality_score"],   errors="coerce")
+
+        def z(x: pd.Series) -> pd.Series:
+            x_clean = x.dropna()
+            mu = float(x_clean.mean()) if len(x_clean) else 0.0
+            sd = float(x_clean.std(ddof=1)) if len(x_clean) > 1 else 1.0
+            if sd <= 0:
+                sd = 1.0
+            return (x - mu) / sd  # preserve index; NaNs remain NaN
+
+        data["z_sim"] = z(data["semantic_similarity"])
+        data["z_org"] = z(data["originality_score"])
+        data["mimicry_index"] = data["z_sim"] - data["z_org"]
+
+        # Threshold decision: > +k SD above mean as risk
+        mu = float(np.nanmean(data["mimicry_index"]))
+        sd = float(np.nanstd(data["mimicry_index"]))
+        thr = mu + MIMICRY_SD_MULTIPLIER * sd
+        data["mimicry_risk"] = data["mimicry_index"] > thr
+
+        grp = (
+        data.groupby("ai_assistance_enabled")
+            .agg(
+                mean_mimicry_index=("mimicry_index", "mean"),
+                risk_rate=("mimicry_risk", "mean"),
+                n=("mimicry_index", "count"),
+            )
+            .reindex([True, False])
+            .reset_index()
+        )
+
+        pair = data[["semantic_similarity", "originality_score"]].dropna()
+        corr = (
+            float(np.corrcoef(pair["semantic_similarity"], pair["originality_score"])[0, 1])
+            if len(pair) > 1 else 0.0
+        )
+
+        return {
+            "threshold": thr,
+            "threshold_sd_multiplier": MIMICRY_SD_MULTIPLIER,
+            "overall_correlation_sim_vs_org": corr,
+            "group_summary": grp,
+            "detail_sample": data[["semantic_similarity", "originality_score", "mimicry_index", "mimicry_risk", "ai_assistance_enabled"]],
+        }
+    except Exception as e:
+        return {"error": f"RQ2 evaluation failed: {e}"}
+
+def analyze_rq3(df: pd.DataFrame) -> Dict[str, Any]:
+    """RQ3 — Cross‑domain transfer learning with/without AI support.
+
+    We model Δtransfer = transfer_count(stage3) − transfer_count(stage2) per session,
+    compare AI vs No‑AI (Welch t‑test, Cohen’s d), and provide domain‑level splits.
+    """
+    try:
+        pivot = (
+            df[df["stage_number"].isin([2, 3])]
+            .pivot_table(
+                index=["session_id", "ai_assistance_enabled", "domain"],
+                columns="stage_number",
+                values="transfer_count",
+                aggfunc="mean",
+            )
+            .reset_index()
+            .rename(columns={2: "stage2", 3: "stage3"})
+        )
+        if pivot.empty:
+            return {"error": "Insufficient stage 2/3 data for transfer analysis"}
+
+        pivot["delta_transfer"] = pd.to_numeric(pivot["stage3"], errors="coerce") - pd.to_numeric(pivot["stage2"], errors="coerce")
+
+        ai = pivot[pivot["ai_assistance_enabled"] == True]["delta_transfer"]
+        no_ai = pivot[pivot["ai_assistance_enabled"] == False]["delta_transfer"]
+
+        t, p = ttest_independent(ai, no_ai)
+        d = cohens_d(ai, no_ai)
+
+        by_domain = (
+            pivot.groupby(["ai_assistance_enabled", "domain"]).agg(
+                mean_delta=("delta_transfer", "mean"), n=("delta_transfer", "count")
+            ).reset_index()
+        )
+        by_domain = by_domain.sort_values(["ai_assistance_enabled", "domain"],
+                                  ascending=[False, True])
+
+        return {
+            "n_sessions": int(len(pivot)),
+            "delta_mean_ai": float(pd.to_numeric(ai, errors="coerce").mean()) if len(ai) else 0.0,
+            "delta_mean_no_ai": float(pd.to_numeric(no_ai, errors="coerce").mean()) if len(no_ai) else 0.0,
+            "t_stat": t,
+            "p_value": p,
+            "significant": bool(p < STATISTICAL_SIGNIFICANCE_THRESHOLD),
+            "effect_size_d": d,
+            "by_domain": by_domain,
+            "detail": pivot[["session_id", "ai_assistance_enabled", "domain", "stage2", "stage3", "delta_transfer"]],
+        }
+    except Exception as e:
+        return {"error": f"RQ3 evaluation failed: {e}"}
+
+def analyze_research_questions(df: pd.DataFrame) -> Dict[str, Any]:
+    """Run statistical tests for RQ1–RQ3 using cleaned dataset values (type‑safe)."""
+    return {
+        "RQ1": analyze_rq1(df),
+        "RQ2": analyze_rq2(df),
+        "RQ3": analyze_rq3(df),
+    }
+
+# ================================
+# VISUALISATIONS (PLOTLY)
+# ================================
+
+def fig_factorial(df: pd.DataFrame):
+    """2×2×3 factorial bar panels (RQ labels on titles)."""
     if not PLOTTING_AVAILABLE or go is None or make_subplots is None:
         return None
-    
     try:
+        agg = summarize_factorial(df)["table"]
+        if agg.empty:
+            return None
         fig = make_subplots(
-            rows=1, cols=3,
-            subplot_titles=("H1: AI Dependency", "H2: Expertise Differences", "H3: Transfer Learning")
+            rows=2,
+            cols=2,
+            subplot_titles=(
+                "Overall Quality (RQ1)",
+                "Originality (RQ2 context)",
+                "Bias Recognition (RQ1)",
+                "Guidance Usage",
+            ),
         )
-        
-        # H1: AI Dependency
-        h1 = hypothesis_results.get("h1_ai_dependency", {})
-        if "error" not in h1:
-            fig.add_trace(
-                go.Bar(name="AI Dependency", x=["No AI", "AI Assisted"], 
-                      y=[h1.get("no_ai_mean", 0), h1.get("ai_mean", 0)]),
-                row=1, col=1
-            )
-        
-        # H2: Expertise 
-        h2 = hypothesis_results.get("h2_expertise_difference", {})
-        if "error" not in h2:
-            fig.add_trace(
-                go.Bar(name="Expertise", x=["Expert", "Novice"],
-                      y=[h2.get("expert_guidance_rate", 0), h2.get("novice_guidance_rate", 0)]),
-                row=1, col=2
-            )
-        
-        # H3: Transfer
-        h3 = hypothesis_results.get("h3_transfer_learning", {})
-        if "error" not in h3:
-            fig.add_trace(
-                go.Bar(name="Transfer", x=["Stage 2", "Stage 3"],
-                      y=[h3.get("stage_2_mean", 0), h3.get("stage_3_mean", 0)]),
-                row=1, col=3
-            )
-        
-        fig.update_layout(height=400, title_text="Research Hypothesis Testing Results")
+        agg["cond"] = agg["user_expertise"].astype(str) + " | AI=" + agg["ai_assistance_enabled"].astype(str)
+        for i, metric in enumerate(["overall_quality_score", "originality_score", "bias_recognition_count", "guidance_requested"], start=1):
+            row, col = (1 if i <= 2 else 2), (1 if i in [1, 3] else 2)
+            for b in agg["bias_type"].unique():
+                sub = agg[agg["bias_type"] == b]
+                fig.add_trace(
+                    go.Bar(
+                        x=sub["cond"],
+                        y=sub[metric],
+                        name=str(b),
+                        showlegend=(i == 1),
+                    ),
+                    row=row,
+                    col=col,
+                )
+        fig.update_layout(
+            height=640,
+            title_text="Factorial Results across Bias Types",
+            barmode="group",
+            legend_traceorder="grouped",
+        )
         return fig
-        
+    except Exception as e: 
+        st.error(f"Error building factorial figure: {e}")
+        return None
+
+def fig_parroting_scatter(df: pd.DataFrame):
+    """Similarity vs Originality scatter, coloured by AI (RQ2)."""
+    if not PLOTTING_AVAILABLE or px is None:
+        return None
+    try:
+        d = df[["semantic_similarity", "originality_score", "ai_assistance_enabled", "bias_type"]].copy()
+        d = d.dropna()
+        return px.scatter(
+            d,
+            x="semantic_similarity",
+            y="originality_score",
+            color="ai_assistance_enabled",
+            symbol="bias_type",
+            opacity=0.7,
+            title="RQ2: Similarity vs Originality (colour = AI)",
+        )
     except Exception as e:
-        st.error(f"Error creating hypothesis charts: {e}")
+        st.error(f"Error building parroting scatter: {e}")
+        return None
+
+def fig_transfer_lines(df: pd.DataFrame):
+    """Transfer count by Stage (2→3), split by AI and domain (RQ3)."""
+    if not PLOTTING_AVAILABLE or px is None:
+        return None
+    try:
+        d = df[df["stage_number"].isin([2, 3])][["stage_number", "transfer_count", "ai_assistance_enabled", "domain"]].copy()
+        d = d.dropna()
+        return px.line(
+            d,
+            x="stage_number",
+            y="transfer_count",
+            color="ai_assistance_enabled",
+            line_dash="domain",
+            markers=True,
+            title="RQ3: Transfer Count by Stage (2→3)",
+        )
+    except Exception as e: 
+        st.error(f"Error building transfer lines: {e}")
         return None
 
 # ================================
-# MAIN DASHBOARD INTERFACE
+# STREAMLIT TABS (UI)
 # ================================
 
-def main():
-    """Main dashboard interface."""
+def tab_dataset_generation() -> None:
+    """Tab 0 — Dataset selection and generation controls."""
+    st.header("📊 Simulated Dataset Generation & Management")
+    sims = get_available_simulations()
+
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.subheader("📁 Available Datasets")
+
+        r1, r2 = st.columns([1, 3])
+        with r1:
+            if st.button("🔄 Refresh datasets", use_container_width=True):
+                try:
+                    st.cache_data.clear()
+                finally:
+                    st.toast("Datasets list refreshed.", icon="✅")
+                    st.rerun()
+
+        sims = get_available_simulations()
+
+        if sims:
+            selected = st.selectbox("Select simulation dataset:", sims, key="dataset_selector")
+            if selected:
+                df = load_simulation_dataset(selected)
+                if df is not None:
+                    st.session_state["current_dataset"] = df
+                    st.session_state["current_sim_name"] = selected
+
+                    stats = compute_descriptives(df)
+                    a, b, c, d = st.columns(4)
+                    a.metric("Sessions", stats.get("total_sessions", 0))
+                    b.metric("Responses", stats.get("total_responses", 0))
+                    c.metric("Avg Words", f"{stats.get('average_response_length', 0):.1f}")
+                    d.metric("Quality OK", f"{(1 - stats.get('low_effort_rate', 0)) * 100:.1f}%")
+
+                    st.write("**Experimental Conditions Distribution:**")
+                    d1, d2, d3 = st.columns(3)
+                    d1.write("*Expertise:* ")
+                    d1.json(stats.get("expertise_distribution", {}))
+                    d2.write("*AI Assistance:* ")
+                    d2.json(stats.get("ai_assistance_distribution", {}))
+                    d3.write("*Bias Types:* ")
+                    d3.json(stats.get("bias_type_distribution", {}))
+        else:
+            st.info("No simulation datasets found. Generate one below.")
+
+    with c2:
+        st.subheader("🧪 Generate New Dataset")
+
+        if SIMULATION_AVAILABLE and SimulatedUserGenerator is not None:
+            st.write("**2×2×3 Factorial Design:**")
+            st.write("• Expertise: Novice, Expert")
+            st.write("• AI Assistance: Enabled, Disabled")
+            st.write("• Bias Type: Confirmation, Anchoring, Availability")
+
+            with st.form("gen_controls", clear_on_submit=False):
+                replicates = st.slider("Replicates per condition", 1, 10, 3)
+
+                # Live size preview: 2 expertise × 2 AI × 3 biases = 12 sessions per replicate; 4 stages each
+                sessions = 12 * int(replicates)
+                responses = sessions * 4
+                st.caption(f"Planned size: {sessions} sessions • {responses} responses (4 stages).")
+
+                use_seed = st.checkbox("Use random seed", value=True)
+                seed_val = st.number_input("Seed", min_value=0, max_value=2_147_483_647, value=42, step=1)
+                model_name = st.text_input("Model (Ollama id)", value="llama3.2:instruct")
+                target_words = st.slider("Target response length (words)", 60, 400, 180, 10)
+
+                submitted = st.form_submit_button("🚀 Generate Simulated Dataset", type="primary")
+
+            if submitted:
+                prog = st.progress(0)
+                status = st.empty()
+
+                def cb(cur: int, tot: int, sid: str) -> None:
+                    p = float(cur) / float(max(tot, 1))
+                    prog.progress(p)
+                    status.text(f"Generating: {sid} ({cur}/{tot})")
+
+                try:
+                    with st.spinner("Initializing simulation generator..."):
+                        # Resolve a usable scenarios.csv location
+                        candidate_paths = [
+                            "/mnt/data/scenarios.csv",  # Chat upload path
+                            str(DATA_DIR / "scenarios.csv"),  # project data folder (config-driven)
+                            "data/scenarios.csv",
+                            "scenarios.csv",
+                        ]
+                        scenarios_path = None
+                        for cand in candidate_paths:
+                            try:
+                                if Path(cand).exists():
+                                    scenarios_path = cand
+                                    break
+                            except Exception:
+                                pass
+                        if scenarios_path is None:
+                            scenarios_path = str(DATA_DIR / "scenarios.csv")
+
+                        gen = SimulatedUserGenerator(
+                            scenarios_csv_path=scenarios_path,
+                            replicates_per_condition=int(replicates),
+                            seed=int(seed_val) if use_seed else None,
+                            model_name=model_name.strip(),
+                            target_words=int(target_words),
+                        )
+
+                    res = gen.generate_full_dataset(progress_callback=cb)  # auto dataset_#
+                    if res.get("success"):
+                        st.success(f"✅ Generated {res['summary']['generation_metadata']['total_generated']} sessions!")
+                        st.info("🔄 Refresh the page to see the new dataset in the dropdown.")
+                        with st.expander("📋 Generation Summary"):
+                            st.json(res.get("summary", {}))
+                    else:
+                        st.error(f"❌ Generation failed: {res.get('error', 'Unknown error')}")
+                except Exception as e:
+                    st.error(f"❌ Generation error: {e}")
+        else:
+            st.error("Simulation generator not available")
+
+def tab_rq1_stats() -> None:
+    """Tab 1 — RQ1: AI vs No‑AI statistical comparison."""
+    st.header("📈 RQ1 – AI vs No‑AI: Reasoning Quality under Bias Conditions")
+    if "current_dataset" not in st.session_state:
+        st.warning("⚠️ Please select a dataset in Tab 0 first.")
+        return
+    df = st.session_state["current_dataset"]
+
+    with st.spinner("Running RQ1 analyses..."):
+        rq1 = analyze_rq1(df)
+
+    if "error" in rq1:
+        st.error(rq1["error"]) 
+        return
+
+    m1, m2, m3 = st.columns(3)
+    q = rq1.get("overall_quality_score", {})
+    s = rq1.get("semantic_similarity", {})
+    b = rq1.get("bias_recognition_count", {})
+    m1.metric("Quality Δ (AI−NoAI)", f"{q.get('diff', 0):.3f}")
+    m2.metric("Similarity Δ (AI−NoAI)", f"{s.get('diff', 0):.3f}")
+    m3.metric("Bias Rec Δ (AI−NoAI)", f"{b.get('diff', 0):.3f}")
+
+    def show_test_block(title: str, res: Dict[str, Any]) -> None:
+        st.subheader(title)
+        if res:
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("AI Mean", f"{res.get('mean_ai', 0):.3f}")
+            c2.metric("No‑AI Mean", f"{res.get('mean_no_ai', 0):.3f}")
+            c3.metric("p (raw)", f"{res.get('p_value', 1):.4f}")
+            c4.metric("p (Holm)", f"{res.get('p_value_adj', res.get('p_value', 1)):.4f}")
+            c5.metric("Cohen d", f"{res.get('effect_size_d', 0):.2f}")
+            if res.get("significant_adj", False):
+                st.success("✅ Significant after Holm–Bonferroni (α=0.05)")
+            elif res.get("significant", False):
+                st.warning("⚠️ Significant (raw) but not after Holm–Bonferroni")
+            else:
+                st.info("ℹ️ Not statistically significant (α=0.05)")
+
+    show_test_block("Overall Quality Score", q)
+    show_test_block("Semantic Similarity (Dependency Signal)", s)
+    show_test_block("Bias Recognition Count", b)
+
+    if PLOTTING_AVAILABLE:
+        fig = fig_factorial(df)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+
+
+def tab_rq2_parroting() -> None:
+    """Tab 2 — RQ2: Parroting vs Reasoning analysis."""
+    st.header("🧠 RQ2 – Parroting vs Reasoning: Can our metrics tell them apart?")
+    if "current_dataset" not in st.session_state:
+        st.warning("⚠️ Please select a dataset in Tab 0 first.")
+        return
+    df = st.session_state["current_dataset"]
+
+    with st.spinner("Computing mimicry indices and correlations..."):
+        rq2 = analyze_rq2(df)
+
+    if "error" in rq2:
+        st.error(rq2["error"]) 
+        return
+
+    c1, c2 = st.columns(2)
+    corr_val = rq2.get("overall_correlation_sim_vs_org", 0.0)
+    corr_display = "N/A" if (corr_val is None or (isinstance(corr_val, float) and np.isnan(corr_val))) else f"{corr_val:.3f}"
+    thr_val = rq2.get("threshold", None)
+    thr_display = "N/A" if (thr_val is None or (isinstance(thr_val, float) and np.isnan(thr_val))) else f"{thr_val:.2f}"
+    c1.metric("Similarity↔Originality correlation", corr_display)
+    c2.metric("Mimicry threshold (z-sim−z-org)", thr_display)
+
+    grp = rq2.get("group_summary")
+    if isinstance(grp, pd.DataFrame) and not grp.empty:
+        st.subheader("AI vs No-AI Mimicry Index")
+        grp_sorted = grp.sort_values("ai_assistance_enabled", ascending=False)  
+        st.dataframe(grp.rename(columns={
+            "ai_assistance_enabled": "AI Enabled",
+            "mean_mimicry_index": "Mean Mimicry Index",
+            "risk_rate": "Risk Proportion",
+        }))
+    elif grp is not None:
+        st.subheader("AI vs No-AI Mimicry Index")
+        st.json(grp)
+
+    if PLOTTING_AVAILABLE and px is not None:
+        sc = fig_parroting_scatter(df)
+        if sc:
+            st.plotly_chart(sc, use_container_width=True)
+
+        # Risk bar plot
+        if isinstance(grp, pd.DataFrame) and not grp.empty and px is not None:
+            df_bar = grp.copy()
+            label_map = {True: "AI On", False: "No AI"}
+            df_bar["AI Enabled"] = df_bar["ai_assistance_enabled"].map(label_map).fillna("Unknown")
+            df_bar["AI Enabled"] = pd.Categorical(df_bar["AI Enabled"],
+                                      categories=["AI On", "No AI"],
+                                      ordered=True)
+            df_bar["risk_rate"] = pd.to_numeric(df_bar["risk_rate"], errors="coerce").clip(0, 1)
+
+            bar = px.bar(
+                df_bar,
+                x="AI Enabled",
+                y="risk_rate",
+                text="risk_rate",
+                title="RQ2: Proportion Above Mimicry Risk Threshold",
+            )
+            # Percentage axis + labels
+            bar.update_traces(texttemplate="%{text:.0%}", textposition="outside")
+            bar.update_layout(
+                yaxis_tickformat=".0%",
+                yaxis_title="Mimicry Risk (Proportion)",
+                xaxis_title=None,
+                bargap=0.25,
+                legend_traceorder="grouped",  # harmless now; useful if you add a 'color=' split later
+                barmode="group",
+            )
+            # Cleaner hover
+            bar.update_traces(hovertemplate="Condition=%{x}<br>Risk=%{y:.1%}<extra></extra>")
+
+            st.plotly_chart(bar, use_container_width=True)
+
+def tab_rq3_transfer() -> None:
+    """Tab 3 — RQ3: Transfer learning analysis."""
+    st.header("🔁 RQ3 – Cross‑Domain Transfer Learning with/without AI")
+    if "current_dataset" not in st.session_state:
+        st.warning("⚠️ Please select a dataset in Tab 0 first.")
+        return
+    df = st.session_state["current_dataset"]
+
+    with st.spinner("Evaluating transfer deltas (Stage 2→3)..."):
+        rq3 = analyze_rq3(df)
+
+    if "error" in rq3:
+        st.error(rq3["error"]) 
+        return
+
+    a, b, c = st.columns(3)
+    a.metric("ΔTransfer (AI)", f"{rq3.get('delta_mean_ai', 0):.3f}")
+    b.metric("ΔTransfer (No‑AI)", f"{rq3.get('delta_mean_no_ai', 0):.3f}")
+    c.metric("p‑value", f"{rq3.get('p_value', 1):.4f}")
+    if rq3.get("significant"):
+        st.success("✅ Statistically significant (α=0.05)")
+    else:
+        st.info("ℹ️ Not statistically significant (α=0.05)")
+
+    if isinstance(rq3.get("by_domain"), pd.DataFrame):
+        st.subheader("Domain‑level ΔTransfer (Exploratory)")
+        st.dataframe(rq3["by_domain"].rename(columns={
+            "ai_assistance_enabled": "AI Enabled",
+            "mean_delta": "Mean ΔTransfer",
+            "n": "N",
+        }))
+
+    if PLOTTING_AVAILABLE:
+        ln = fig_transfer_lines(df)
+        if ln:
+            st.plotly_chart(ln, use_container_width=True)
+
+
+def tab_exports() -> None:
+    """Tab 4 — Research exports (CSV/JSON + summary JSON)."""
+    st.header("📤 Research Exports")
+    if "current_dataset" not in st.session_state:
+        st.warning("⚠️ Please select a dataset in Tab 0 first.")
+        return
+    df = st.session_state["current_dataset"]
+    sim = st.session_state.get("current_sim_name", "dataset")
+
+    st.subheader("📊 Dataset Exports")
+    c1, c2 = st.columns(2)
+    with c1:
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        st.download_button("📄 Download Full Dataset (CSV)", csv_bytes, file_name=f"clarusai_{sim}.csv", mime="text/csv")
+
+        json_bytes = df.to_json(orient="records", indent=2).encode("utf-8")
+        st.download_button("📋 Download Full Dataset (JSON)", json_bytes, file_name=f"clarusai_{sim}.json", mime="application/json")
+
+    with c2:
+        st.write("**Statistical Summary (RQ‑aligned)**")
+        stats = compute_descriptives(df)
+        rq = analyze_research_questions(df)
+        fact = summarize_factorial(df)["table"]
+        summary = {
+            "dataset": {
+                "name": sim,
+                "export_timestamp": datetime.now().isoformat(),
+                "n_sessions": int(stats.get("total_sessions", 0)),
+                "n_responses": int(stats.get("total_responses", 0)),
+                "design": "2×2×3 (expertise × AI × bias)",
+            },
+            "descriptives": stats,
+            "factorial_table_head": fact.head(50).to_dict(orient="records") if isinstance(fact, pd.DataFrame) else [],
+            "RQ": rq,
+        }
+        st.download_button(
+            "📈 Download Statistical Summary (JSON)",
+            json.dumps(summary, indent=2, default=str).encode("utf-8"),
+            file_name=f"clarusai_summary_{sim}.json",
+            mime="application/json",
+        )
+
+
+def tab_results_summary() -> None:
+    """Tab 5 — Viva‑ready consolidated RQ summary."""
+    st.header("📋 Results Summary Panel (RQ1–RQ3)")
+    if "current_dataset" not in st.session_state:
+        st.warning("⚠️ Please select a dataset in Tab 0 first.")
+        return
+    df = st.session_state["current_dataset"]
+
+    stats = compute_descriptives(df)
+    rq = analyze_research_questions(df)
+
+    st.subheader("Sample Characteristics")
+    st.write(f"- Total sessions: {stats.get('total_sessions', 0)}")
+    st.write(f"- Total responses: {stats.get('total_responses', 0)}")
+    st.write(f"- Mean response length: {stats.get('average_response_length', 0):.1f} words")
+
+    st.subheader("Experimental Conditions")
+    exp = stats.get("expertise_distribution", {})
+    aid = stats.get("ai_assistance_distribution", {})
+    st.write(f"- Novice: {exp.get('novice', 0)}, Expert: {exp.get('expert', 0)}")
+    st.write(f"- AI‑assisted: {aid.get(True, 0)}, Unassisted: {aid.get(False, 0)}")
+
+    st.subheader("RQ Findings (high‑level)")
+    r1, r2, r3 = st.columns(3)
+    rq1 = rq.get("RQ1", {})
+    q = rq1.get("overall_quality_score", {})
+    r1.metric("RQ1 Quality Δ (AI−NoAI)", f"{q.get('diff', 0):.3f}")
+
+    rq2 = rq.get("RQ2", {})
+    _c = rq2.get("overall_correlation_sim_vs_org", 0.0)
+    _c_disp = "N/A" if (_c is None or (isinstance(_c, float) and np.isnan(_c))) else f"{_c:.3f}"
+    r2.metric("RQ2 corr(sim, org)", _c_disp)
+
+    rq3 = rq.get("RQ3", {})
+    r3.metric("RQ3 p‑value", f"{rq3.get('p_value', 1):.4f}")
+
+    with st.expander("Details: RQ1"):
+        st.json({k: v for k, v in rq1.items() if isinstance(v, dict)})
+    with st.expander("Details: RQ2"):
+        if isinstance(rq2.get("group_summary"), pd.DataFrame):
+            st.dataframe(rq2["group_summary"])
+        else:
+            st.json({k: v for k, v in rq2.items() if k != "detail_sample"})
+    with st.expander("Details: RQ3"):
+        if isinstance(rq3.get("by_domain"), pd.DataFrame):
+            st.dataframe(rq3["by_domain"])
+        else:
+            st.json({k: v for k, v in rq3.items() if k != "detail"})
+
+# ================================
+# APP ENTRY POINT
+# ================================
+
+def main() -> None:
+    """Entry point for the Streamlit dashboard.
+
+    Tabs:
+      0. Dataset Generation (load/generate datasets)
+      1. RQ1 – Statistical Analysis (AI vs No‑AI)
+      2. RQ2 – Parroting Detection
+      3. RQ3 – Transfer Learning
+      4. Research Exports (CSV/JSON + RQ summary JSON)
+      5. Results Summary (viva‑ready overview)
+    """
     try:
-        # Page configuration
         st.set_page_config(
             page_title="ClārusAI Research Dashboard",
             page_icon="📊",
             layout="wide",
-            initial_sidebar_state="collapsed"
+            initial_sidebar_state="collapsed",
         )
-        
         load_css()
-        
-        # Header
+
         st.markdown("# 📊 ClārusAI Research Dashboard")
-        st.markdown("*UCL Master's Dissertation: Building AI Literacy Through Simulation*")
+        st.markdown("*UCL Master's Dissertation: Beyond Surface Learning*")
         st.markdown("---")
-        
-        # Check system requirements
-        if not SIMULATION_AVAILABLE or SimulatedUserGenerator is None:
-            st.error("⚠️ Simulation generator not available. Please check sim_user_generator.py")
-        
+
         if not PLOTTING_AVAILABLE:
-            st.warning("⚠️ Some visualization features unavailable. Install matplotlib, seaborn, plotly")
-        
-        # Main tabs
+            st.warning("⚠️ Some visualization features unavailable. Try: pip install plotly")
+        if not SIMULATION_AVAILABLE or SimulatedUserGenerator is None:
+            st.info("ℹ️ Simulation generator module not found – dataset loading still works.")
+
         tabs = st.tabs([
-            "📊 Dataset Generation", 
-            "📈 Statistical Analysis", 
-            "🧮 Scoring Validation", 
-            "📤 Research Exports"
+            "📊 Dataset Generation",  # 0
+            "📈 RQ1 – Statistical Analysis",  # 1
+            "🧠 RQ2 – Parroting Detection",  # 2
+            "🔁 RQ3 – Transfer Learning",  # 3
+            "📤 Research Exports",  # 4
+            "📋 Results Summary",  # 5
         ])
-        
-        # ================================
-        # TAB 1: Dataset Generation
-        # ================================
+
         with tabs[0]:
-            st.header("📊 Simulated Dataset Generation & Management")
-            
-            # Available simulations
-            available_sims = get_available_simulations()
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.subheader("📁 Available Datasets")
-                if available_sims:
-                    selected_sim = st.selectbox(
-                        "Select simulation dataset:",
-                        available_sims,
-                        key="dataset_selector"
-                    )
-                    
-                    # Load and display dataset info
-                    if selected_sim:
-                        df = load_simulation_dataset(selected_sim)
-                        
-                        if df is not None:
-                            st.session_state['current_dataset'] = df
-                            st.session_state['current_sim_name'] = selected_sim
-                            
-                            # Dataset summary
-                            stats = calculate_basic_statistics(df)
-                            
-                            col_a, col_b, col_c, col_d = st.columns(4)
-                            col_a.metric("Sessions", stats.get("total_sessions", 0))
-                            col_b.metric("Responses", stats.get("total_responses", 0))
-                            col_c.metric("Avg Words", f"{stats.get('average_response_length', 0):.1f}")
-                            col_d.metric("Quality Rate", f"{(1 - stats.get('low_effort_rate', 0)) * 100:.1f}%")
-                            
-                            # Distribution summaries
-                            st.write("**Experimental Conditions Distribution:**")
-                            dist_col1, dist_col2, dist_col3 = st.columns(3)
-                            
-                            with dist_col1:
-                                st.write("*Expertise:*", stats.get("expertise_distribution", {}))
-                            with dist_col2:
-                                st.write("*AI Assistance:*", stats.get("ai_assistance_distribution", {}))
-                            with dist_col3:
-                                st.write("*Bias Types:*", stats.get("bias_type_distribution", {}))
-                
-                else:
-                    st.info("No simulation datasets found. Generate one below.")
-            
-            with col2:
-                st.subheader("🧪 Generate New Dataset")
-                
-                if SIMULATION_AVAILABLE and SimulatedUserGenerator is not None:
-                    # Generation parameters
-                    st.write("**2×2×3 Factorial Design:**")
-                    st.write("• User Expertise: Novice, Expert")
-                    st.write("• AI Assistance: Enabled, Disabled") 
-                    st.write("• Bias Type: Confirmation, Anchoring, Availability")
-                    st.write("• Replicates: 3 per condition")
-                    st.write("• **Total: 144 responses (36 sessions × 4 stages)**")
-                    
-                    if st.button("🚀 Generate Simulated Dataset", type="primary"):
-                        
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        def dashboard_progress_callback(current, total, session_id):
-                            progress = float(current) / float(total)
-                            progress_bar.progress(progress)
-                            status_text.text(f"Generating: {session_id} ({current}/{total})")
-                        
-                        try:
-                            with st.spinner("Initializing simulation generator..."):
-                                generator = SimulatedUserGenerator()
-                            
-                            # Generate dataset
-                            result = generator.generate_full_dataset(
-                                progress_callback=dashboard_progress_callback
-                            )
-                            
-                            if result["success"]:
-                                st.success(f"✅ Generated {result['summary']['generation_metadata']['total_generated']} sessions!")
-                                st.info("🔄 Refresh the page to see the new dataset in the dropdown.")
-                                
-                                # Show generation summary
-                                summary = result["summary"]
-                                with st.expander("📋 Generation Summary"):
-                                    st.json(summary["generation_metadata"])
-                            else:
-                                st.error(f"❌ Generation failed: {result.get('error', 'Unknown error')}")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Generation error: {e}")
-                            if config.DEBUG:
-                                st.exception(e)
-                else:
-                    st.error("Simulation generator not available")
-        
-        # ================================
-        # TAB 2: Statistical Analysis  
-        # ================================
+            tab_dataset_generation()
         with tabs[1]:
-            st.header("📈 Statistical Analysis & Hypothesis Testing")
-            
-            if 'current_dataset' not in st.session_state:
-                st.warning("⚠️ Please select a dataset in Tab 1 first.")
-            else:
-                df = st.session_state['current_dataset']
-                
-                # Research hypotheses testing
-                st.subheader("🎯 Core Research Hypotheses")
-                
-                with st.spinner("Running statistical analyses..."):
-                    hypothesis_results = test_research_hypotheses(df)
-                
-                # Display hypothesis results
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write("**H1: AI Dependency Effect**")
-                    h1 = hypothesis_results.get("h1_ai_dependency", {})
-                    if "error" not in h1:
-                        st.metric("AI Users Similarity", f"{h1.get('ai_mean', 0):.3f}")
-                        st.metric("Non-AI Users Similarity", f"{h1.get('no_ai_mean', 0):.3f}")
-                        st.metric("P-value", f"{h1.get('p_value', 1):.4f}")
-                        
-                        if h1.get('significant', False):
-                            st.success("✅ Statistically significant")
-                        else:
-                            st.info("ℹ️ Not statistically significant")
-                    else:
-                        st.error(f"H1 Error: {h1.get('error', 'Unknown')}")
-                
-                with col2:
-                    st.write("**H2: Expertise Differences**")
-                    h2 = hypothesis_results.get("h2_expertise_difference", {})
-                    if "error" not in h2:
-                        st.metric("Expert Guidance Rate", f"{h2.get('expert_guidance_rate', 0):.3f}")
-                        st.metric("Novice Guidance Rate", f"{h2.get('novice_guidance_rate', 0):.3f}")
-                        st.metric("Difference", f"{h2.get('difference', 0):.3f}")
-                    else:
-                        st.error(f"H2 Error: {h2.get('error', 'Unknown')}")
-                
-                # Factorial analysis
-                st.subheader("🔬 2×2×3 Factorial Analysis")
-                # Analyze factorial effects and sanitize tuple keys for JSON compatibility
-                raw_factorial_results = analyze_factorial_effects(df)
-
-                # Flatten any tuple keys into strings before export
-                # Clean both levels of tuple keys in nested factorial_means
-                factorial_means_clean = {}
-
-                raw_means = raw_factorial_results.get("factorial_means", {})
-
-                for outer_key, inner_dict in raw_means.items():
-                    outer_label = " → ".join(map(str, outer_key)) if isinstance(outer_key, tuple) else str(outer_key)
-                    cleaned_inner = {
-                        " → ".join(map(str, k)) if isinstance(k, tuple) else str(k): v
-                        for k, v in inner_dict.items()
-                    }
-                    factorial_means_clean[outer_label] = cleaned_inner
-
-
-                sample_sizes_clean = {
-                    " → ".join(map(str, k)) if isinstance(k, tuple) else str(k): v
-                    for k, v in raw_factorial_results.get("sample_sizes", {}).items()
-                }
-
-                factorial_results = {
-                    "factorial_means": factorial_means_clean,
-                    "sample_sizes": sample_sizes_clean
-                }
-                
-                if PLOTTING_AVAILABLE and make_subplots is not None and go is not None:
-                    factorial_fig = create_factorial_visualization(df)
-                    if factorial_fig:
-                        st.plotly_chart(factorial_fig, use_container_width=True)
-                
-                    # Hypothesis testing visualization
-                    hyp_fig = create_hypothesis_testing_charts(hypothesis_results)
-                    if hyp_fig:
-                        st.plotly_chart(hyp_fig, use_container_width=True)
-                
-                # Detailed statistics
-                with st.expander("📊 Detailed Statistical Results"):
-                    st.write("**Factorial Means:**")
-                    if factorial_results:
-                        st.json(factorial_results.get("sample_sizes", {}))
-                    
-                    st.write("**Hypothesis Testing Details:**")
-                    st.json(hypothesis_results)
-        
-        # ================================
-        # TAB 3: Scoring Validation
-        # ================================
+            tab_rq1_stats()
         with tabs[2]:
-            st.header("🧮 6-Dimensional Scoring Framework Validation")
-            
-            if 'current_dataset' not in st.session_state:
-                st.warning("⚠️ Please select a dataset in Tab 1 first.")
-            else:
-                df = st.session_state['current_dataset']
-
-                # Scoring distribution analysis
-                st.subheader("📊 Scoring Distribution Analysis")
-                
-                scoring_cols = [
-                    "semantic_similarity", "originality_score", "bias_recognition_count",
-                    "strategy_count", "transfer_count", "metacognition_count"
-                ]
-                
-                # Check scoring completeness
-                scoring_errors = df["scoring_error"].sum()
-                total_responses = len(df)
-                scoring_success_rate = (total_responses - scoring_errors) / total_responses * 100
-                
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Scoring Success Rate", f"{scoring_success_rate:.1f}%")
-                col2.metric("Scoring Errors", scoring_errors)
-                col3.metric("Low Effort Flags", df["low_effort_flag"].sum())
-                col4.metric("High Similarity Flags", df["high_similarity_risk"].astype(bool).sum())
-                
-                if PLOTTING_AVAILABLE and px is not None:
-                    # Scoring correlation matrix
-                    st.subheader("🔗 Scoring Dimension Correlations")
-                    
-                    try:
-                        # Create correlation matrix for valid scores only
-                        valid_scores = df[df["scoring_error"] == False][scoring_cols]
-                        
-                        if not valid_scores.empty:
-                            correlation_matrix = valid_scores.corr()
-                            
-                            fig = px.imshow(
-                                correlation_matrix,
-                                labels=dict(x="Scoring Dimension", y="Scoring Dimension", color="Correlation"),
-                                x=scoring_cols,
-                                y=scoring_cols,
-                                color_continuous_scale="RdBu",
-                                aspect="auto"
-                            )
-                            fig.update_layout(title="6-Dimensional Scoring Correlation Matrix")
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # Scoring distribution by expertise
-                            st.subheader("📈 Score Distributions by Expertise")
-                            
-                            if make_subplots is not None and go is not None:
-                                fig2 = make_subplots(
-                                    rows=2, cols=3,
-                                    subplot_titles=scoring_cols
-                                )
-                                
-                                for i, col in enumerate(scoring_cols):
-                                    row = (i // 3) + 1
-                                    col_pos = (i % 3) + 1
-                                    
-                                    for expertise in df["user_expertise"].unique():
-                                        expertise_data = pd.to_numeric(df[df["user_expertise"] == expertise][col], errors='coerce').dropna()
-                                        
-                                        fig2.add_trace(
-                                            go.Histogram(
-                                                x=expertise_data,
-                                                name=f"{expertise}",
-                                                opacity=0.7,
-                                                showlegend=(i == 0)
-                                            ),
-                                            row=row, col=col_pos
-                                        )
-                                
-                                fig2.update_layout(height=500, title_text="Score Distributions by User Expertise")
-                                st.plotly_chart(fig2, use_container_width=True)
-                            else:
-                                st.info("Advanced plotting features not available - install plotly for visualizations")
-                            
-                        else:
-                            st.warning("No valid scoring data available for correlation analysis")
-                            
-                    except Exception as e:
-                        st.error(f"Error creating scoring visualizations: {e}")
-                
-                # Algorithm transparency
-                st.subheader("🔍 Algorithm Transparency")
-                
-                # Show scoring thresholds
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write("**Scoring Thresholds:**")
-                    thresholds = {
-                        "Semantic Similarity High": config.SCORING_THRESHOLDS.get("semantic_similarity_high", 0.75),
-                        "Semantic Similarity Medium": config.SCORING_THRESHOLDS.get("semantic_similarity_medium", 0.5),
-                        "Bias Recognition Min Terms": config.SCORING_THRESHOLDS.get("bias_recognition_min_terms", 2),
-                        "Originality Low": config.SCORING_THRESHOLDS.get("originality_low", 0.25),
-                        "Originality High": config.SCORING_THRESHOLDS.get("originality_high", 0.5)
-                    }
-                    st.json(thresholds)
-                
-                with col2:
-                    st.write("**Quality Indicators:**")
-                    quality_metrics = {
-                        "Response Length Threshold": config.QUALITY_THRESHOLDS.get("minimum_response_length", 10),
-                        "Min Words Per Stage": config.QUALITY_THRESHOLDS.get("minimum_words_per_stage", 15),
-                        "Engagement Threshold": config.QUALITY_THRESHOLDS.get("engagement_threshold", 0.3)
-                    }
-                    st.json(quality_metrics)
-                
-                # Cross-validation analysis
-                st.subheader("✅ Cross-Validation Results")
-                
-                # Simulate cross-validation by splitting data
-                try:
-                    # Group by session to maintain session integrity
-                    sessions = df["session_id"].unique()
-                    n_sessions = len(sessions)
-                    
-                    if n_sessions >= 4:  # Need minimum for cross-validation
-                        split_point = n_sessions // 2
-                        
-                        train_sessions = sessions[:split_point]
-                        test_sessions = sessions[split_point:]
-                        
-                        train_df = df[df["session_id"].isin(train_sessions)]
-                        test_df = df[df["session_id"].isin(test_sessions)]
-                        
-                        # Compare distributions
-                        cv_metrics = {}
-                        for col in scoring_cols:
-                            if col in train_df.columns and col in test_df.columns:
-                                train_mean = safe_mean_calculation(train_df[col])
-                                test_mean = safe_mean_calculation(test_df[col])
-                                difference = abs(train_mean - test_mean)
-                                cv_metrics[col] = {
-                                    "train_mean": train_mean,
-                                    "test_mean": test_mean,
-                                    "difference": difference,
-                                    "consistency": difference < 0.1  # Threshold for consistency
-                                }
-                        
-                        # Display cross-validation results
-                        cv_df = pd.DataFrame(cv_metrics).T
-                        st.dataframe(cv_df)
-                        
-                        # Overall consistency score
-                        consistent_dimensions = sum(1 for metrics in cv_metrics.values() if metrics["consistency"])
-                        consistency_rate = consistent_dimensions / len(cv_metrics) * 100
-                        
-                        st.metric("Cross-Validation Consistency", f"{consistency_rate:.1f}%")
-                        
-                        if consistency_rate >= 80:
-                            st.success("✅ High scoring consistency across data splits")
-                        elif consistency_rate >= 60:
-                            st.warning("⚠️ Moderate scoring consistency")
-                        else:
-                            st.error("❌ Low scoring consistency - review algorithm")
-                    
-                    else:
-                        st.info("Insufficient data for cross-validation (need 4+ sessions)")
-                        
-                except Exception as e:
-                    st.error(f"Error in cross-validation analysis: {e}")
-        
-        # ================================
-        # TAB 4: Research Exports
-        # ================================
+            tab_rq2_parroting()
         with tabs[3]:
-            st.header("📤 Research Exports & Documentation")
-            
-            if 'current_dataset' not in st.session_state:
-                st.warning("⚠️ Please select a dataset in Tab 1 first.")
-            else:
-                df = st.session_state['current_dataset']
-                sim_name = st.session_state.get('current_sim_name', 'unknown')
-                
-                # Export options
-                st.subheader("📊 Dataset Exports")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write("**Full Dataset Export**")
-                    
-                    # CSV export
-                    csv_data = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📄 Download Full Dataset (CSV)",
-                        data=csv_data,
-                        file_name=f"clarusai_simulation_{sim_name}.csv",
-                        mime="text/csv"
-                    )
-                    
-                    # JSON export
-                    json_data = df.to_json(orient='records', indent=2).encode('utf-8')
-                    st.download_button(
-                        label="📋 Download Full Dataset (JSON)",
-                        data=json_data,
-                        file_name=f"clarusai_simulation_{sim_name}.json",
-                        mime="application/json"
-                    )
-                
-                with col2:
-                    st.write("**Statistical Summary Export**")
-                    
-                    # Calculate comprehensive summary
-                    stats = calculate_basic_statistics(df)
-                    raw_factorial_results = analyze_factorial_effects(df)
+            tab_rq3_transfer()
+        with tabs[4]:
+            tab_exports()
+        with tabs[5]:
+            tab_results_summary()
 
-                    # Clean both levels of tuple keys
-                    factorial_means_clean = {}
-                    raw_means = raw_factorial_results.get("factorial_means", {})
-
-                    for outer_key, inner_dict in raw_means.items():
-                        outer_label = " → ".join(map(str, outer_key)) if isinstance(outer_key, tuple) else str(outer_key)
-                        cleaned_inner = {
-                            " → ".join(map(str, k)) if isinstance(k, tuple) else str(k): v
-                            for k, v in inner_dict.items()
-                        }
-                        factorial_means_clean[outer_label] = cleaned_inner
-
-                    sample_sizes_clean = {
-                        " → ".join(map(str, k)) if isinstance(k, tuple) else str(k): v
-                        for k, v in raw_factorial_results.get("sample_sizes", {}).items()
-                    }
-
-                    factorial_results = {
-                        "factorial_means": factorial_means_clean,
-                        "sample_sizes": sample_sizes_clean
-                    }
-
-                    hypothesis_results = test_research_hypotheses(df)
-                    
-                    summary_report = {
-                        "dataset_info": {
-                            "simulation_name": sim_name,
-                            "generated_timestamp": datetime.now().isoformat(),
-                            "export_timestamp": datetime.now().isoformat()
-                        },
-                        "descriptive_statistics": stats,
-                        "factorial_analysis": factorial_results,
-                        "hypothesis_testing": hypothesis_results,
-                        "research_metadata": {
-                            "experimental_design": "2x2x3 factorial",
-                            "factors": ["user_expertise", "ai_assistance", "bias_type"],
-                            "scoring_dimensions": 6,
-                            "total_conditions": 12
-                        }
-                    }
-
-                    summary_json = json.dumps(summary_report, indent=2, default=str).encode('utf-8')
-                    st.download_button(
-                        label="📈 Download Statistical Summary",
-                        data=summary_json,
-                        file_name=f"clarusai_statistical_summary_{sim_name}.json",
-                        mime="application/json"
-                    )
-                
-                # Research documentation
-                st.subheader("📚 Research Documentation")
-                
-                # Calculate stats for documentation
-                stats = calculate_basic_statistics(df)
-                
-                # Methodology documentation
-                methodology_doc = f"""
-                # ClārusAI Simulation Study Methodology
-
-                ## Dataset: {sim_name}
-                **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-                ## Experimental Design
-                - **Type:** 2×2×3 Factorial Design
-                - **Factors:**
-                - User Expertise: Novice vs Expert (2 levels)
-                - AI Assistance: Enabled vs Disabled (2 levels)
-                - Bias Type: Confirmation vs Anchoring vs Availability (3 levels)
-                - **Replicates:** 3 per condition
-                - **Total Sessions:** {stats.get('total_sessions', 0)}
-                - **Total Responses:** {stats.get('total_responses', 0)}
-
-                ## 6-Dimensional Scoring Framework
-                1. **Semantic Similarity** - Measures AI dependency vs independence
-                2. **Bias Recognition** - Detects awareness of cognitive biases
-                3. **Conceptual Originality** - Evaluates independent reasoning
-                4. **Mitigation Strategy** - Assesses strategic thinking quality
-                5. **Domain Transferability** - Tests cross-context application
-                6. **Metacognitive Awareness** - Captures self-reflective reasoning
-
-                ## Quality Control
-                - **Scoring Success Rate:** {((len(df) - df['scoring_error'].sum()) / len(df) * 100):.1f}%
-                - **Low Effort Rate:** {(df['low_effort_flag'].mean() * 100):.1f}%
-                - **High Similarity Risk:** {(df['high_similarity_risk'].mean() * 100):.1f}%
-
-                ## Research Hypotheses
-                1. **H1:** AI assistance increases semantic similarity (dependency indicator)
-                2. **H2:** Expert and novice users show different AI utilization patterns
-                3. **H3:** Transfer learning improves from mitigation to transfer stages
-
-                ## Data Quality Indicators
-                - **Average Response Length:** {stats.get('average_response_length', 0):.1f} words
-                - **Average Session Time:** {stats.get('average_session_time', 0):.1f} minutes
-                - **Guidance Usage Rate:** {(stats.get('guidance_usage_rate', 0) * 100):.1f}%
-
-                ## Statistical Thresholds
-                - **Significance Level:** α = 0.05
-                - **Effect Size Thresholds:** Small (0.2), Medium (0.5), Large (0.8)
-                - **Scoring Thresholds:** See configuration documentation
-
-                ---
-                *Generated by ClārusAI Research Dashboard*
-                *UCL Master's Dissertation: Building AI Literacy Through Simulation*
-                """
-                
-                st.download_button(
-                    label="📖 Download Methodology Documentation",
-                    data=methodology_doc.encode('utf-8'),
-                    file_name=f"clarusai_methodology_{sim_name}.md",
-                    mime="text/markdown"
-                )
-                
-                # Configuration export
-                config_export = {
-                    "scoring_thresholds": config.SCORING_THRESHOLDS,
-                    "quality_thresholds": config.QUALITY_THRESHOLDS,
-                    "validation_rules": config.VALIDATION_RULES,
-                    "bias_keywords_count": {bias: len(keywords) for bias, keywords in config.BIAS_KEYWORDS.items()},
-                    "simulation_parameters": {
-                        "replicates_per_condition": 3,
-                        "stages_per_session": 4,
-                        "total_conditions": 12
-                    }
-                }
-                
-                config_json = json.dumps(config_export, indent=2).encode('utf-8')
-                st.download_button(
-                    label="⚙️ Download Configuration Settings",
-                    data=config_json,
-                    file_name=f"clarusai_config_{sim_name}.json",
-                    mime="application/json"
-                )
-                
-                # Summary
-                st.subheader("📊 Results Summary")
-                
-                hypothesis_results = test_research_hypotheses(df)
-                
-                with st.expander("📋 Key Findings Summary", expanded=True):
-                    st.write("**Sample Characteristics:**")
-                    st.write(f"- Total sessions: {stats.get('total_sessions', 0)}")
-                    st.write(f"- Total responses: {stats.get('total_responses', 0)}")
-                    st.write(f"- Mean response length: {stats.get('average_response_length', 0):.1f} words")
-                    
-                    st.write("**Experimental Conditions:**")
-                    exp_dist = stats.get('expertise_distribution', {})
-                    ai_dist = stats.get('ai_assistance_distribution', {})
-                    st.write(f"- Novice users: {exp_dist.get('novice', 0)}, Expert users: {exp_dist.get('expert', 0)}")
-                    st.write(f"- AI-assisted: {ai_dist.get(True, 0)}, Unassisted: {ai_dist.get(False, 0)}")
-                    
-                    st.write("**Research Hypothesis Results:**")
-                    h1 = hypothesis_results.get("h1_ai_dependency", {})
-                    if "error" not in h1:
-                        sig_text = "significant" if h1.get('significant', False) else "not significant"
-                        st.write(f"- H1 (AI Dependency): {sig_text} (p = {h1.get('p_value', 1):.4f})")
-                    
-                    h2 = hypothesis_results.get("h2_expertise_difference", {})
-                    if "error" not in h2:
-                        st.write(f"- H2 (Expertise Difference): Expert guidance rate = {h2.get('expert_guidance_rate', 0):.3f}, Novice = {h2.get('novice_guidance_rate', 0):.3f}")
-                    
-                    h3 = hypothesis_results.get("h3_transfer_learning", {})
-                    if "error" not in h3:
-                        improvement = h3.get('improvement', 0)
-                        st.write(f"- H3 (Transfer Learning): Stage improvement = {improvement:.3f}")
-        
-        # Footer
         render_academic_footer()
-        
-    except Exception as e:
+
+    except Exception as e: 
         st.error("❌ Critical dashboard error occurred")
         st.error(f"Error: {e}")
-        
-        if config.DEBUG:
+        if getattr(config, "DEBUG", False):
             st.exception(e)
-            st.write("**Traceback:**")
             st.code(traceback.format_exc())
 
 if __name__ == "__main__":

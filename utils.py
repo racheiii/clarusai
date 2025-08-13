@@ -1,22 +1,19 @@
 """
-ClārusAI: Enhanced Shared Navigation and Utility Functions
-
 utils.py - Reusable navigation and page configuration functions + 4-stage training utilities
 """
 
 import streamlit as st
 from pathlib import Path
 from typing import List, Optional
+import config
 
 def load_css() -> None:
-    """Load custom CSS safely with error handling - NO FALLBACK CSS"""
     try:
         css_path = Path("assets/styles/main.css")
         if css_path.exists():
             with open(css_path, "r", encoding="utf-8") as f:
                 st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
         else:
-            # Only essential Streamlit cleanup, no visual styles
             st.markdown("""
             <style>
             #MainMenu {visibility: hidden;}
@@ -29,67 +26,8 @@ def load_css() -> None:
     except Exception as e:
         st.warning(f"Could not load CSS: {e}")
 
-def apply_compact_layout() -> None:
-    """Apply compact layout CSS to reduce whitespace throughout the app"""
-    compact_css = """
-    <style>
-    /* Compact layout improvements */
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
-    }
-    
-    /* Reduce component spacing */
-    .element-container {
-        margin-bottom: 0.5rem !important;
-    }
-    
-    /* Compact button spacing */
-    .stButton {
-        margin-bottom: 0.5rem !important;
-    }
-    
-    /* Reduce title spacing */
-    h1, h2, h3 {
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-    
-    /* Compact columns */
-    .row-widget {
-        margin-bottom: 0.5rem !important;
-    }
-    
-    /* Compact forms */
-    .stForm {
-        padding: 0.5rem !important;
-    }
-    
-    /* Compact metrics */
-    [data-testid="metric-container"] {
-        padding: 0.25rem !important;
-    }
-    
-    /* Compact expanders */
-    .streamlit-expanderHeader {
-        padding: 0.5rem !important;
-    }
-    
-    /* Compact text areas */
-    .stTextArea > div {
-        margin-bottom: 0.5rem !important;
-    }
-    
-    /* Compact progress bars */
-    .stProgress {
-        margin: 0.5rem 0 !important;
-    }
-    </style>
-    """
-    st.markdown(compact_css, unsafe_allow_html=True)
-
 def setup_page_config(page_title: str, page_icon: str = "🧠", enable_sidebar: bool = True) -> None:
-    """Configure Streamlit page settings consistently"""
+    """Configure Streamlit page settings"""
     st.set_page_config(
         page_title=f"ClārusAI - {page_title}",
         page_icon=page_icon,
@@ -126,7 +64,6 @@ def get_current_page() -> str:
         return 'home'
 
 def render_navigation(current_page: Optional[str] = None) -> None:
-    """Render consistent navigation sidebar"""
     if current_page is None:
         current_page = get_current_page()
     
@@ -168,7 +105,7 @@ def render_navigation(current_page: Optional[str] = None) -> None:
         """, unsafe_allow_html=True)
 
 def render_academic_footer() -> None:
-    """Render consistent academic footer"""
+    """Render academic footer"""
     st.markdown("---")
     st.markdown("""
     <div class="academic-footer-content">
@@ -179,7 +116,7 @@ def render_academic_footer() -> None:
     """, unsafe_allow_html=True)
 
 def render_page_header(title: str, subtitle: Optional[str] = None, icon: str = "🧠") -> None:
-    """Render consistent page headers"""
+    """Render page headers"""
     st.markdown(f"""
     <div class="page-header">
         <h1>{icon} {title}</h1>
@@ -351,7 +288,7 @@ def render_research_access_section() -> None:
     st.markdown("---")
     st.markdown("""
     <div class="home-research-access">
-        <h3>🔬 Research Team Access</h3>
+        <h3>🔬 Dashboard Access</h3>
         <p>
         Access automated testing, statistical analysis, and methodology validation tools
         </p>
@@ -359,12 +296,12 @@ def render_research_access_section() -> None:
     """, unsafe_allow_html=True)
 
 # =============================================================================
-# 4-STAGE TRAINING SPECIFIC UTILITIES - ENHANCED
+# 4-STAGE TRAINING SPECIFIC UTILITIES 
 # =============================================================================
 
 def render_progress_indicator(current_stage: int, total_stages: int, stage_names: List[str]) -> None:
     """
-    Render enhanced progress indicator for multi-stage interactions.
+    Render progress indicator for multi-stage interactions.
     
     Args:
         current_stage: Current stage number (0-based)
@@ -403,13 +340,6 @@ def render_progress_indicator(current_stage: int, total_stages: int, stage_names
                 st.markdown(f"⏳ {stage_names[i]}")
 
 def render_stage_context(previous_responses: List[str], stage_names: List[str]) -> None:
-    """
-    Show previous responses as read-only context.
-    
-    Args:
-        previous_responses: List of previous response texts
-        stage_names: List of stage names
-    """
     if not previous_responses:
         return
     
@@ -422,10 +352,6 @@ def render_stage_context(previous_responses: List[str], stage_names: List[str]) 
                     st.markdown("---")
 
 def render_training_navigation() -> None:
-    """
-    Enhanced compact navigation for training interface without sidebar.
-    Provides clean, minimal navigation that doesn't interfere with training flow.
-    """
     # Compact navigation header with reduced spacing
     col1, col2 = st.columns([4, 1])
     
@@ -438,7 +364,7 @@ def render_training_navigation() -> None:
 
 def setup_training_page_config(page_title: str, page_icon: str = "🎯") -> None:
     """
-    Enhanced page configuration specifically for training interface (no sidebar).
+    Page configuration specifically for training interface
     
     Args:
         page_title: Title for the browser tab
@@ -523,21 +449,10 @@ def render_condition_indicator(user_expertise, ai_assistance_enabled: bool) -> N
     """, unsafe_allow_html=True)
 
 def render_research_metadata(scenario_id: str, bias_type: str, domain: str) -> None:
-    """
-    Render research metadata for debugging and validation.
-    
-    Args:
-        scenario_id: Unique scenario identifier
-        bias_type: Type of cognitive bias being tested
-        domain: Professional domain of the scenario
-    """
-    if st.secrets.get("DEBUG", False):  # Only show in debug mode
+    """Show scenario metadata in debug mode."""
+    if config.DEBUG:
         with st.expander("🔍 Research Metadata", expanded=False):
-            st.code(f"""
-Scenario ID: {scenario_id}
-Bias Type: {bias_type}
-Domain: {domain}
-            """)
+            st.code(f"Scenario ID: {scenario_id}\nBias Type: {bias_type}\nDomain: {domain}")
 
 def render_session_quality_indicator(word_count: int, response_time: float, guidance_used: bool) -> None:
     """

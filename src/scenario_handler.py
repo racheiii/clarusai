@@ -1,11 +1,8 @@
 """
-ClārusAI: Scenario Loading and Selection System
+Scenario Loading and Selection System
 
-src/scenario_handler.py - Scenario management and balanced selection
-
-Purpose:
-Handles CSV loading, validation, and stratified scenario selection
-for maintaining experimental validity in 2×2×3 factorial design.
+Loads the scenarios CSV, validates required fields, and selects a scenario
+with light weighting (e.g., cognitive load for novice users).
 """
 
 import pandas as pd
@@ -27,29 +24,17 @@ logger = logging.getLogger(__name__)
 
 class ScenarioHandler:
     """
-    Comprehensive scenario management for experimental research.
-    
-    Academic Purpose: Ensures experimental integrity through validated
-    scenario loading and balanced selection for 2×2×3 factorial design.
+    Manage scenarios: load/validate the CSV and select a scenario
+    with basic weighting to support the 2×2×3 design.
     """
     
+    #Initialise scenario handler
     def __init__(self):
-        """Initialize scenario handler."""
         self.scenarios_df = None
         self.loaded = False
-    
+
+    # Load and validate cognitive bias scenarios from CSV
     def load_scenarios(self) -> Optional[pd.DataFrame]:
-        """
-        Load and validate cognitive bias scenarios from CSV.
-        
-        Academic Purpose: Ensures experimental integrity by validating
-        all required columns and data quality for research protocol.
-        
-        Returns:
-            pandas.DataFrame: Validated scenario database
-            None: If file missing or validation fails
-        """
-        
         if self.loaded and self.scenarios_df is not None:
             return self.scenarios_df
         
@@ -85,9 +70,8 @@ class ScenarioHandler:
             logger.error(f"Error loading scenarios database: {e}")
             return None
     
-    def _validate_scenarios_structure(self) -> Dict[str, Any]:
-        """Validate required CSV structure."""
-        
+    # Validate required CSV structure
+    def _validate_scenarios_structure(self) -> Dict[str, Any]:        
         required_columns = config.VALIDATION_RULES["required_scenario_columns"]
         if self.scenarios_df is None:
             return {
@@ -110,9 +94,7 @@ class ScenarioHandler:
         
         return {'valid': True, 'errors': None}
     
-    def _validate_scenarios_content(self) -> Dict[str, Any]:
-        """Validate scenario content quality."""
-        
+    def _validate_scenarios_content(self) -> Dict[str, Any]:        
         warnings = []
         
         # Validate bias types
@@ -143,22 +125,8 @@ class ScenarioHandler:
             'warnings': warnings
         }
     
+    # stratified scenario selection for balanced experimental design
     def select_balanced_scenario(self, user_expertise: UserExpertise, ai_assistance: bool) -> Optional[pd.Series]:
-        """
-        Implement stratified scenario selection for balanced experimental design.
-        
-        Academic Purpose: Ensures balanced distribution across experimental
-        conditions while maintaining randomization and research validity.
-        
-        Args:
-            user_expertise: UserExpertise enum (Factor 1)
-            ai_assistance: Boolean (Factor 2)
-        
-        Returns:
-            pandas.Series: Selected scenario (Factor 3 determined)
-            None: If selection fails
-        """
-        
         if self.scenarios_df is None or self.scenarios_df.empty:
             logger.error("Cannot select scenario - no scenarios available")
             return None
@@ -182,18 +150,8 @@ class ScenarioHandler:
                 logger.warning("No scenarios match selection criteria, using all available")
                 available_scenarios = self.scenarios_df.copy()
             
-            # Apply AI assistance appropriateness filter
-            if ai_assistance:
-                # Prefer scenarios marked as helpful for AI assistance
-                helpful_scenarios = available_scenarios[
-                    available_scenarios['ai_appropriateness'] == 'helpful'
-                ]
-                if not helpful_scenarios.empty and random.random() < 0.8:
-                    available_scenarios = helpful_scenarios
-                    logger.info("Applied AI-helpful scenario weighting")
-            
-            # Randomize final selection from weighted pool
-            selected_scenario = available_scenarios.sample(frac=1).reset_index(drop=True).iloc[0]
+            # Randomly select one row from the weighted pool
+            selected_scenario = available_scenarios.sample(n=1).iloc[0]
             
             # Log selection for research tracking
             selection_metadata = {
@@ -204,7 +162,6 @@ class ScenarioHandler:
                 'bias_type': selected_scenario['bias_type'],
                 'domain': selected_scenario['domain'],
                 'cognitive_load': selected_scenario['cognitive_load_level'],
-                'ai_appropriateness': selected_scenario['ai_appropriateness'],
                 'selection_method': 'weighted_random',
                 'available_pool_size': len(available_scenarios),
                 'total_scenarios': len(self.scenarios_df)
@@ -218,18 +175,14 @@ class ScenarioHandler:
             logger.error(f"Scenario selection failed: {e}")
             return None
     
-    def create_experimental_session(self, session_id: str, user_expertise: UserExpertise, 
-                                   ai_assistance: bool, selected_scenario: pd.Series) -> Optional['ExperimentalSession']:
-        """
-        Create experimental session from selected scenario.
-        
-        Academic Purpose: Converts scenario selection into properly
-        structured experimental session for research tracking.
-        
-        Returns:
-            ExperimentalSession: Configured session object
-            None: If creation fails
-        """
+    # Create experimental session from selected scenario
+    def create_experimental_session(
+    self,
+    session_id: str,
+    user_expertise: UserExpertise,
+    ai_assistance: bool,
+    selected_scenario: pd.Series
+) -> Optional[ExperimentalSession]:
         
         try:
             # Convert pandas Series to dictionary
@@ -250,14 +203,8 @@ class ScenarioHandler:
             logger.error(f"Failed to create experimental session: {e}")
             return None
     
+    # Get comprehensive scenario database statistics
     def get_scenario_statistics(self) -> Dict[str, Any]:
-        """
-        Get comprehensive scenario database statistics.
-        
-        Academic Purpose: Provides overview of experimental design
-        coverage and scenario distribution for research validation.
-        """
-        
         if self.scenarios_df is None:
             return {'error': 'No scenarios loaded'}
         
@@ -267,7 +214,6 @@ class ScenarioHandler:
                 'bias_type_distribution': self.scenarios_df['bias_type'].value_counts().to_dict(),
                 'domain_distribution': self.scenarios_df['domain'].value_counts().to_dict(),
                 'cognitive_load_distribution': self.scenarios_df['cognitive_load_level'].value_counts().to_dict(),
-                'ai_appropriateness_distribution': self.scenarios_df['ai_appropriateness'].value_counts().to_dict(),
                 'experimental_coverage': self._calculate_experimental_coverage()
             }
             
@@ -277,9 +223,8 @@ class ScenarioHandler:
             logger.error(f"Failed to calculate scenario statistics: {e}")
             return {'error': str(e)}
     
+    # Calculate 2×2×3 factorial design coverage
     def _calculate_experimental_coverage(self) -> Dict[str, Any]:
-        """Calculate 2×2×3 factorial design coverage."""
-        
         if self.scenarios_df is None:
             logger.error("No scenarios loaded for experimental coverage calculation")
             return {'error': 'No scenarios loaded'}
@@ -313,14 +258,8 @@ class ScenarioHandler:
             logger.error(f"Failed to calculate experimental coverage: {e}")
             return {'error': str(e)}
     
+    # Validate specific scenario content quality
     def validate_scenario_content(self, scenario_id: str) -> Dict[str, Any]:
-        """
-        Validate specific scenario content quality.
-        
-        Academic Purpose: Ensures individual scenario meets research
-        standards for experimental validity.
-        """
-        
         if self.scenarios_df is None:
             return {'valid': False, 'error': 'No scenarios loaded'}
         
@@ -360,14 +299,8 @@ class ScenarioHandler:
             logger.error(f"Scenario validation failed for {scenario_id}: {e}")
             return {'valid': False, 'error': str(e)}
     
-    def get_available_scenarios_for_condition(self, user_expertise: UserExpertise, ai_assistance: bool) -> Dict[str, Any]:
-        """
-        Get scenarios available for specific experimental condition.
-        
-        Academic Purpose: Preview scenario pool for experimental condition
-        to ensure adequate coverage and balance.
-        """
-        
+    # Get scenarios available for specific experimental condition
+    def get_available_scenarios_for_condition(self, user_expertise: UserExpertise, ai_assistance: bool) -> Dict[str, Any]:      
         if self.scenarios_df is None:
             return {'available': [], 'count': 0}
         
@@ -382,14 +315,6 @@ class ScenarioHandler:
                 ]
                 if not medium_load_scenarios.empty:
                     available_scenarios = medium_load_scenarios
-            
-            # Apply AI assistance weighting
-            if ai_assistance:
-                helpful_scenarios = available_scenarios[
-                    available_scenarios['ai_appropriateness'] == 'helpful'
-                ]
-                if not helpful_scenarios.empty:
-                    available_scenarios = helpful_scenarios
             
             scenario_info = []
             for _, scenario in available_scenarios.iterrows():

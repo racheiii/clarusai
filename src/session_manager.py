@@ -1,33 +1,29 @@
 """
-ClārusAI: Session State Management System
+src/session_manager.py - Session state management
 
-src/session_manager.py - Comprehensive session state management
-
-Academic Purpose:
+Purpose:
 Handles all session state operations with null safety, error tracking,
 and recovery functionality for experimental data integrity.
-
-Author: Rachel Seah
-Date: July 2025
 """
 
 import streamlit as st
 import json
+
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 import os
 
 import config
 from src.models import UserExpertise, ExperimentalSession
-from enum import Enum
+
+from enum import Enum as _Enum
 
 def enum_to_str(obj):
     """Recursively convert Enums and NumPy types (incl. bool_) to JSON-safe values."""
-    from enum import Enum
     import numpy as np
-    if isinstance(obj, Enum):
+    if isinstance(obj, _Enum):
         return obj.value
     elif isinstance(obj, (np.integer, np.floating, np.bool_)):
         return obj.item()
@@ -46,10 +42,9 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 def safe_get_session_value(key: str, default: Any = None) -> Any:
-    """
-    Safely retrieve session state values with null checking.
+    """Safely retrieve session state values with null checking.
 
-    Academic Purpose: Prevents crashes during experimental sessions while
+    Prevents crashes during experimental sessions while
     maintaining research data integrity.
     """
     try:
@@ -58,12 +53,7 @@ def safe_get_session_value(key: str, default: Any = None) -> Any:
         return default
 
 def safe_set_session_value(key: str, value: Any) -> bool:
-    """
-    Safely set session state values with error logging.
-
-    Academic Purpose: Ensures reliable session state management while
-    tracking potential issues for research validation.
-    """
+    """Safely set session state values with error logging"""
     try:
         setattr(st.session_state, key, value)
         return True
@@ -88,7 +78,7 @@ class SessionManager:
     """
     Comprehensive session state management for experimental research.
 
-    Academic Purpose: Provides robust session management with error tracking,
+    Provides session management with error tracking,
     recovery capabilities, and research data integrity validation.
     """
 
@@ -100,7 +90,7 @@ class SessionManager:
         """
         Initialize comprehensive session state with null safety.
 
-        Academic Purpose: Establishes robust data structures for tracking
+        Establishes data structures for tracking
         the complete experimental condition while ensuring data integrity.
         """
 
@@ -152,7 +142,7 @@ class SessionManager:
         """
         Set user expertise with validation and logging.
 
-        Academic Purpose: Factor 1 of 2×2×3 factorial design.
+        Factor 1 of 2×2×3 factorial design.
         """
         if safe_set_session_value('user_expertise', expertise):
             self.auto_save_session_data('expertise_selection', {
@@ -167,7 +157,7 @@ class SessionManager:
         """
         Set AI assistance preference with validation and logging.
 
-        Academic Purpose: Factor 2 of 2×2×3 factorial design.
+        Factor 2 of 2×2×3 factorial design.
         """
         if safe_set_session_value('ai_assistance_enabled', enabled):
             self.auto_save_session_data('assistance_selection', {
@@ -182,7 +172,7 @@ class SessionManager:
         """
         Set experimental session with validation.
 
-        Academic Purpose: Complete experimental condition assignment.
+        Complete experimental condition assignment.
         """
         if safe_set_session_value('experimental_session', session):
             safe_set_session_value('interaction_flow', 'scenario')
@@ -204,8 +194,7 @@ class SessionManager:
     def advance_stage(self, current_stage: int) -> bool:
         """
         Advance to next experimental stage with validation.
-
-        Academic Purpose: Progress through 4-stage experimental protocol.
+        Progress through 4-stage experimental protocol.
         """
         if current_stage < 3:
             if safe_set_session_value('current_stage', current_stage + 1):
@@ -245,7 +234,7 @@ class SessionManager:
         """
         Reset session state with comprehensive cleanup.
 
-        Academic Purpose: Enable new experimental trials while
+        Enable new experimental trials while
         maintaining data integrity.
         """
         try:
@@ -276,7 +265,7 @@ class SessionManager:
         """
         Log errors for research analysis.
 
-        Academic Purpose: Track system issues for data quality assessment.
+        Track system issues for data quality assessment.
         """
         error_entry = {
             'timestamp': datetime.now().isoformat(),
@@ -339,7 +328,7 @@ class SessionManager:
         """
         Generate cryptographically unique session ID.
 
-        Academic Purpose: Prevents session ID collisions in multi-user
+        Prevents session ID collisions in multi-user
         research environments while maintaining participant anonymity.
         """
         try:
@@ -366,7 +355,7 @@ class SessionManager:
         """
         Auto-save session data with enhanced error handling.
 
-        Academic Purpose: Maintains detailed logs of user interactions
+        Maintains detailed logs of user interactions
         for research analysis while providing session recovery.
         """
         try:
@@ -411,7 +400,7 @@ class SessionManager:
 
             # Write autosave file
             with open(autosave_file, 'w') as f:
-                json.dump(enum_to_str(enum_to_str(session_snapshot)), f, indent=2)
+                json.dump(enum_to_str(session_snapshot), f, indent=2)
 
             safe_set_session_value('last_auto_save', datetime.now())
 
@@ -427,7 +416,7 @@ class SessionRecovery:
     """
     Session recovery and checkpoint management.
 
-    Academic Purpose: Maintains experimental continuity by enabling
+    Purpose: Maintains experimental continuity by enabling
     session recovery within reasonable time windows.
     """
 
@@ -456,7 +445,11 @@ class SessionRecovery:
                 'interaction_flow': safe_get_session_value('interaction_flow'),
 
                 # Experimental session data
-                'experimental_session_data': st.session_state.experimental_session.export_for_analysis() if st.session_state.experimental_session else None,
+                'experimental_session_data': None if not st.session_state.experimental_session else (
+                    (lambda: st.session_state.experimental_session.export_for_analysis())()
+                    if hasattr(st.session_state.experimental_session, "export_for_analysis")
+                    else None
+                ),
 
                 # Legacy compatibility
                 'stage_responses': safe_get_session_value('stage_responses', []),
@@ -484,7 +477,7 @@ class SessionRecovery:
         """
         Load recovery session if available within time window.
 
-        Academic Purpose: Enables continuation of interrupted experimental
+        Enables continuation of interrupted experimental
         sessions while maintaining data quality and experimental validity.
         """
         try:
@@ -501,7 +494,7 @@ class SessionRecovery:
         """
         Restore experimental session from recovery data.
 
-        Academic Purpose: Maintains experimental continuity by restoring
+        Maintains experimental continuity by restoring
         complete session state while preserving data integrity.
         """
         try:
@@ -548,7 +541,7 @@ def get_session_summary() -> Dict[str, Any]:
         'data_quality': {
             'session_initialized': True,
             'has_experimental_session': experimental_session is not None,
-            'session_valid': experimental_session.is_completed if experimental_session else False,
+            'session_valid': bool(experimental_session and getattr(experimental_session, "completion_time", None)),
             'minimal_errors': len(safe_get_session_value('session_errors', [])) < 5
         }
     }

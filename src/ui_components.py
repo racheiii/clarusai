@@ -1,20 +1,19 @@
 """
-ClārusAI: Enhanced User Interface Components
+ClārusAI: User Interface Components
 
-src/ui_components.py - Comprehensive UI components for 4-stage experimental interface
+src/ui_components.py — UI components for a 4‑stage experimental interface.
 
 Purpose:
-Provides enhanced, submission-ready UI components for the complete experimental
-protocol including LLM tutor integration, comprehensive performance analysis,
-and sophisticated feedback systems. Optimized for research data collection
-while maintaining excellent user experience and academic presentation standards.
+Provides well‑documented, submission‑ready UI components for the experimental
+protocol, including (optional) LLM tutor feedback, performance analysis, and
+participant debrief. The code is written for clarity and reproducibility.
 
 Key Features:
-- Integrated LLM tutor feedback with robust fallback systems
-- Comprehensive performance analysis using enhanced 6-dimensional scoring
-- Always-visible feedback containers ensuring consistent user experience
-- Enhanced bias revelation with educational content integration
-- Research-grade interaction logging and dependency pattern tracking
+- Optional LLM tutor guidance with graceful fallback
+- 6‑dimension score visualization using stored results (no duplicate scoring)
+- Always‑visible feedback containers for consistent UX
+- Bias debrief with concise educational framing
+- Research‑grade interaction logging
 """
 import streamlit as st
 import time
@@ -51,24 +50,20 @@ STAGE_TYPES = [
 
 class UIComponents:
     """
-    Fully optimized UI components for experimental interface.
-    
-    Academic Purpose: Provides efficient, non-redundant components while
-    maintaining complete experimental integrity and research value.
-    
-    Key Features:
-    - Single scoring calculation per stage
-    - Unified feedback storage and rendering
-    - Performance optimized (50% CPU, 40% memory savings)
-    - Maintains all research data quality
+    UI component renderer for stages and results
+
+    This class renders all interactive and analytical elements of the
+    cognitive bias training experiment. It ensures that each 4-stage decision-making
+    flow is displayed consistently, captures user input for later scoring, and
+    displays reflective tutor feedback for research analysis.
     """
     
     def __init__(self) -> None:
-        """Initialize UI components."""
+        """Initialise the UIComponents instance with configuration and session context"""
         pass
     
     def show_progress_toast(self):
-        """Show progress toast notification after scenario is loaded."""
+        """Show progress toast notification after scenario is loaded"""
         if (safe_get_session_value('interaction_flow') == 'scenario' and 
             not safe_get_session_value('progress_toast_shown', False)):
             
@@ -79,8 +74,7 @@ class UIComponents:
     
     def render_experimental_setup(self, scenarios_df, scenario_handler, 
                                  session_manager, data_collector) -> bool:
-        """Render experimental setup phase."""
-        
+        """Render the participant setup interface for expertise level and AI assistance selection"""
         apply_compact_layout()
         
         st.markdown('<h2 class="section-header">🎯 Experimental Training Setup</h2>', unsafe_allow_html=True)
@@ -109,7 +103,7 @@ class UIComponents:
         return False
     
     def _render_expertise_selection(self) -> Optional[UserExpertise]:
-        """Render expertise selection interface."""
+        """Render the interface for selecting participant expertise level"""
         
         st.markdown("### 👤 Professional Experience Level")
         st.markdown("Please select the option that best describes your experience in high-stakes professional decision-making:")
@@ -150,7 +144,7 @@ class UIComponents:
         return current_expertise
     
     def _render_assistance_selection(self) -> Optional[bool]:
-        """Render AI assistance selection interface."""
+        """Render the interface for selecting whether AI assistance is enabled"""
         
         st.markdown("### 🤖 AI Assistance Configuration")
         st.markdown("Choose whether you would like AI guidance available during scenario analysis:")
@@ -192,7 +186,7 @@ class UIComponents:
     
     def _render_setup_completion(self, scenarios_df, scenario_handler, 
                                 session_manager, data_collector) -> bool:
-        """Render setup completion and scenario assignment."""
+        """Display confirmation of experimental condition and assign a scenario"""
         
         st.markdown("---")
         
@@ -229,7 +223,6 @@ class UIComponents:
                 
                 if experimental_session:
                     session_manager.set_experimental_session(experimental_session)
-                    # OPTIMIZED: Initialize unified feedback storage (replaces dual arrays)
                     safe_set_session_value('stage_feedback', [None] * 4)
                     st.success("✅ Training scenario assigned successfully!")
                     time.sleep(1)
@@ -241,14 +234,12 @@ class UIComponents:
         return False
     
     def render_scenario_stage(self, scenario: Dict[str, Any], current_stage: int,
-                             ai_guidance, session_manager, data_collector) -> str:
+                         ai_guidance, session_manager, data_collector) -> str:
         """
-        Render individual scenario stage with optimized feedback system.
-        
-        Returns:
-            str: 'stage_completed', 'reset_requested', or 'continue'
+        Render an individual scenario stage, presenting context, prompt, and
+        optional AI guidance, and capture the participant’s written response
+        for subsequent scoring and analysis.
         """
-        
         try:
             self._render_stage_header(scenario, current_stage)
             self._render_stage_prompt(scenario, current_stage)
@@ -260,7 +251,6 @@ class UIComponents:
                 scenario, current_stage, session_manager, data_collector
             )
             
-            # OPTIMIZED: Single unified feedback rendering method
             if result == 'continue':
                 self._render_unified_feedback(scenario, current_stage)
             
@@ -272,7 +262,7 @@ class UIComponents:
             return 'continue'
     
     def _render_stage_header(self, scenario: Dict[str, Any], current_stage: int) -> None:
-        """Render stage header with progress indicator."""
+        """Render the stage title and progress indicator"""
         
         progress = (current_stage + 1) / 4
         st.progress(progress)
@@ -294,7 +284,7 @@ class UIComponents:
         """, unsafe_allow_html=True)
     
     def _render_stage_prompt(self, scenario: Dict[str, Any], current_stage: int) -> None:
-        """Render current stage prompt."""
+        """Render the task prompt for the current stage"""
         
         prompt_field = STAGE_PROMPTS[current_stage]
         current_prompt = scenario.get(prompt_field, f"Stage {current_stage + 1} prompt not available")
@@ -310,7 +300,7 @@ class UIComponents:
     
     def _render_response_interface(self, scenario: Dict[str, Any], current_stage: int,
                                   session_manager, data_collector) -> str:
-        """Render response collection interface."""
+        """Render response collection interface"""
         
         st.markdown("---")
         st.markdown(f'<h4 style="color: var(--text-dark);">✍️ Your {STAGE_NAMES[current_stage]} Response</h4>', unsafe_allow_html=True)
@@ -345,8 +335,7 @@ class UIComponents:
                 # Save response (data_collector handles scoring calculation)
                 if data_collector.save_stage_response(scenario, current_stage, current_response):
                     
-                    # OPTIMIZED: Generate unified feedback using scores from data_collector
-                    # This eliminates duplicate scoring calculations
+                    # Generate unified feedback using scores from data_collector
                     self._generate_and_save_unified_feedback(scenario, current_stage, current_response)
                     
                     if current_stage < 3:
@@ -367,8 +356,9 @@ class UIComponents:
     
     def _generate_and_save_unified_feedback(self, scenario: Dict[str, Any], current_stage: int, response: str) -> None:
         """
-        Generates unified feedback combining LLM reflection and score-based analysis.
-        Safe for use with or without LLM connected.
+        Generate and store a unified feedback object that merges AI-generated 
+        tutor guidance (if enabled) with quantitative performance analysis 
+        based on the scoring framework.
         """
         try:
             # Get experimental session scores from prior stage
@@ -423,10 +413,7 @@ class UIComponents:
             safe_set_session_value('stage_feedback', stage_feedback)
 
     def _create_performance_analysis_from_scores(self, scores: Dict[str, Any], current_stage: int) -> Dict[str, Any]:
-        """
-        OPTIMIZED: Create performance analysis from existing scores.
-        No duplicate calculations - reuses data_collector results.
-        """
+        """Generate performance analysis metrics from existing stage scores"""
         
         # Extract scores safely from scoring engine results
         semantic_score = scores.get('semantic_similarity', 0.5)
@@ -497,7 +484,7 @@ class UIComponents:
         }
     
     def _create_fallback_analysis(self, current_stage: int) -> Dict[str, Any]:
-        """Create fallback performance analysis when scores unavailable."""
+        """Generate a minimal performance analysis when score data is not available"""
         return {
             'performance_summary': f"Your {STAGE_NAMES[current_stage].lower()} demonstrates thoughtful engagement with the scenario.",
             'strengths': ["Clear reasoning", "Relevant analysis", "Professional approach"],
@@ -513,69 +500,83 @@ class UIComponents:
     
     def _render_unified_feedback(self, scenario: Dict[str, Any], current_stage: int) -> None:
         """
-        OPTIMIZED: Render unified feedback in a single expandable section.
-        
-        Eliminates duplicate rendering logic - single expander for all feedback types.
+        Render a single, consolidated feedback section for each stage
+
+        Content is shown only when available:
+        - Expert Guidance (AI-generated feedback) is displayed if present
+        - Performance Analysis is displayed if corresponding score data is available
         """
-        
         stage_feedback = safe_get_session_value('stage_feedback', [None] * 4)
         stage_responses = safe_get_session_value('stage_responses', [])
-        
-        # Only show if stage completed
-        if len(stage_responses) > current_stage and stage_responses[current_stage]:
-            feedback = stage_feedback[current_stage]
-            
-            if feedback:
-                with st.expander(f"🎓📊 Complete Feedback for {STAGE_NAMES[current_stage]}", expanded=False):
-                    
-                    # Expert Tutor Feedback Section
-                    st.markdown("### 🎓 Expert Guidance")
-                    st.markdown(f"""
+
+        # Show feedback only for submitted stages
+        if not (len(stage_responses) > current_stage and stage_responses[current_stage]):
+            return
+
+        feedback = stage_feedback[current_stage]
+        if not feedback:
+            return
+
+        llm_text = feedback.get('llm_feedback')
+        has_scores = bool(feedback.get('has_scores'))
+        analysis = feedback.get('performance_analysis')
+
+        # If there is nothing useful to show, skip rendering quietly
+        if not llm_text and not has_scores:
+            return
+
+        with st.expander(f"🎓📊 Feedback for {STAGE_NAMES[current_stage]}", expanded=False):
+            # Expert Tutor Feedback (only if provided)
+            if llm_text:
+                st.markdown("### 🎓 Expert Guidance")
+                st.markdown(
+                    f"""
                     <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border-left: 4px solid #28a745; margin-bottom: 1rem;">
                         <p style="color: #2c3e50; margin: 0; line-height: 1.6; font-style: italic;">
-                            {feedback['llm_feedback']}
+                            {llm_text}
                         </p>
                     </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Performance Analysis Section (only if scores available)
-                    if feedback.get('has_scores', False):
-                        st.markdown("### 📊 Performance Analysis")
-                        analysis = feedback['performance_analysis']
-                        
-                        # Performance summary
-                        st.markdown(f"""
-                        <div style="background: #e8f4fd; padding: 1rem; border-radius: 8px; border-left: 4px solid #2196f3; margin-bottom: 1rem;">
-                            <h6 style="color: #1976d2; margin: 0 0 0.5rem 0;">📈 Performance Summary</h6>
-                            <p style="color: #424242; margin: 0; line-height: 1.5;">
-                                {analysis['performance_summary']}
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.markdown("**✅ Key Strengths:**")
-                            for strength in analysis['strengths']:
-                                st.markdown(f"• {strength}")
-                        
-                        with col2:
-                            st.markdown("**💡 Development Areas:**")
-                            for improvement in analysis['areas_for_improvement']:
-                                st.markdown(f"• {improvement}")
-                        
-                        # Cognitive awareness indicator
-                        st.markdown(f"""
-                        <div style="background: #fff3e0; padding: 0.75rem; border-radius: 6px; border-left: 3px solid #ff9800; margin-top: 1rem;">
-                            <strong>🧠 Cognitive Awareness Level: {analysis['bias_recognition_score']}</strong>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.info("📊 Detailed performance analysis will be available when scoring system is active.")
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # Performance Analysis (only if scores exist)
+            if has_scores and analysis:
+                st.markdown("### 📊 Performance Analysis")
+                st.markdown(
+                    f"""
+                    <div style="background: #e8f4fd; padding: 1rem; border-radius: 8px; border-left: 4px solid #2196f3; margin-bottom: 1rem;">
+                        <h6 style="color: #1976d2; margin: 0 0 0.5rem 0;">📈 Summary</h6>
+                        <p style="color: #424242; margin: 0; line-height: 1.5;">
+                            {analysis.get('performance_summary', '')}
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**✅ Key Strengths:**")
+                    for s in analysis.get('strengths', [])[:3]:
+                        st.markdown(f"• {s}")
+                with col2:
+                    st.markdown("**💡 Development Areas:**")
+                    for a in analysis.get('areas_for_improvement', [])[:2]:
+                        st.markdown(f"• {a}")
+
+                # Cognitive awareness indicator
+                st.markdown(
+                    f"""
+                    <div style="background: #fff3e0; padding: 0.75rem; border-radius: 6px; border-left: 3px solid #ff9800; margin-top: 1rem;">
+                        <strong>🧠 Cognitive Awareness: {analysis.get('bias_recognition_score', '—')}</strong>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
     
     def _validate_response(self, response: str, stage: int) -> bool:
-        """Validate response quality."""
+        """Check whether the participant's response meets word and character count thresholds"""
         if not response or not response.strip():
             return False
         
@@ -593,7 +594,7 @@ class UIComponents:
         return word_count >= requirements['words'] and char_count >= requirements['chars']
     
     def _render_response_feedback(self, response: str, stage: int) -> None:
-        """Render response validation feedback."""
+        """Render response validation feedback"""
         
         word_count = len(response.split()) if response else 0
         char_count = len(response.strip()) if response else 0
@@ -619,12 +620,7 @@ class UIComponents:
     
     def render_completion_interface(self, scenario: Dict[str, Any], 
                                    session_manager, data_collector) -> str:
-        """
-        Render completion interface with optimized summary feedback.
-        
-        Returns:
-            str: Navigation choice ('results', 'new_scenario', 'home')
-        """
+        """Render completion interface with summary feedback"""
         
         st.markdown('<h2 class="section-header">✅ Training Protocol Completed</h2>', unsafe_allow_html=True)
         
@@ -634,7 +630,7 @@ class UIComponents:
             # Session analytics
             self._render_session_analytics()
             
-            # OPTIMIZED: Summary feedback using unified feedback data
+            # Summary feedback using integrated AI guidance and performance analysis
             self._render_optimized_summary_feedback(scenario)
             
             # Bias revelation
@@ -648,7 +644,7 @@ class UIComponents:
             return self._render_minimal_completion()
     
     def _render_session_analytics(self) -> None:
-        """Render simplified session analytics."""
+        """Render session analytics"""
         
         try:
             experimental_session = safe_get_session_value('experimental_session')
@@ -674,11 +670,7 @@ class UIComponents:
             st.success("Your training session has been completed successfully.")
     
     def _render_optimized_summary_feedback(self, scenario: Dict[str, Any]) -> None:
-        """
-        OPTIMIZED: Render comprehensive summary using unified feedback data.
-        
-        Eliminates redundant calculations and storage by reusing unified feedback.
-        """
+        """Display a detailed summary using all available feedback and performance data"""
         
         st.markdown("---")
         st.markdown("### 📊 Comprehensive Performance Summary")
@@ -690,7 +682,7 @@ class UIComponents:
             st.info("📈 Performance analysis will be available after completing all stages with the scoring system active.")
             return
         
-        # OPTIMIZED: Calculate overall metrics from unified feedback (no duplicate processing)
+        # Calculate overall metrics from unified feedback
         performance_levels = []
         bias_scores = []
         
@@ -732,24 +724,41 @@ class UIComponents:
             st.metric("Analysis Depth", f"{avg_performance * 2.5:.1f}/10")
         
         # Stage-by-stage breakdown
-        
         st.markdown("#### 📈 Stage Performance Overview")
 
         for i, feedback in enumerate(stage_feedback):
             title = f"Stage {i + 1}: {STAGE_NAMES[i]}"
             with st.expander(title, expanded=False):
-                if feedback:
-                    llm = feedback.get("llm_feedback")
-                    has_scores = feedback.get("has_scores", False)
+                if not feedback:
+                    st.info("No feedback available for this stage.")
+                    continue
 
-                    if llm:
-                        st.markdown(f"🤖 *{llm}*")
-                    elif has_scores:
-                        st.info("✅ Scores recorded, but LLM feedback was not available.")
-                    else:
-                        st.warning("⚠️ No meaningful analysis generated due to incomplete or superficial response.")
-                else:
-                    st.info("⚠️ No feedback available for this stage.")    
+                llm = feedback.get("llm_feedback")
+                has_scores = bool(feedback.get("has_scores"))
+                analysis = feedback.get("performance_analysis")
+
+                # Show concise, professional copy only when content exists
+                if llm:
+                    st.markdown("**Expert Guidance**")
+                    st.markdown(f"> {llm}")
+
+                if has_scores and analysis:
+                    st.markdown("**Performance Summary**")
+                    st.markdown(f"- {analysis.get('performance_summary', '')}")
+
+                    details = analysis.get('detailed_metrics', {})
+                    if details:
+                        st.markdown(
+                            "- **Originality**: {0:.2f} | **Bias Awareness**: {1} | **Self‑reflection**: {2} | **Strategies**: {3}".format(
+                                float(details.get('originality', 0)),
+                                int(details.get('bias_awareness', 0)),
+                                int(details.get('self_reflection', 0)),
+                                int(details.get('strategic_thinking', 0)),
+                            )
+                        )
+
+                if not llm and not (has_scores and analysis):
+                    st.info("This stage has recorded a response but no additional feedback was generated.")
     
     def _render_bias_revelation(self, scenario: Dict[str, Any]) -> None:
         try:
@@ -790,9 +799,19 @@ class UIComponents:
         except Exception:
             st.info("⚠️ Bias information is currently unavailable.")
 
+    def _render_experimental_condition_summary(self, expertise: str, ai_assistance: bool, bias_type: str, domain: str) -> None:
+        """Render the summary of experimental conditions for the current session"""
+        st.markdown(f"""
+            <div class="experimental-condition-summary">
+                <p><strong>Expertise:</strong> {expertise}</p>
+                <p><strong>AI Assistance:</strong> {'Enabled' if ai_assistance else 'Disabled'}</p>
+                <p><strong>Bias Type:</strong> {bias_type}</p>
+                <p><strong>Domain:</strong> {domain}</p>
+            </div>
+        """, unsafe_allow_html=True)
 
     def _render_completion_navigation(self) -> str:
-        """Render completion navigation options."""
+        """Render completion navigation options"""
         
         st.markdown("### 🚀 Next Steps")
         

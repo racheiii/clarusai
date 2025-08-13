@@ -1,224 +1,228 @@
 """
-ClārusAI: Enhanced Simulated User Generator
+ClārusAI: Simulated User Generator (LLM‑only, no scoring)
 
-sim_user_generator.py - Generates controlled synthetic user sessions for 2×2×3 factorial research
+Simulated User Generator (LLM‑only, no scoring).
 
-PURPOSE:
-- Create reproducible experimental data for hypothesis testing
-- Eliminate human subject variability while maintaining realistic response patterns
-- Generate statistical power for ANOVA analysis of AI-assisted learning effectiveness
-
-DESIGN:
-- 2×2×3 Factorial: UserExpertise × AI_Assistance × BiasType  
-- 3 replicates per condition = 36 total sessions
-- 4-stage progressive responses per session
-- Realistic variation in response quality and timing
+Generates 2×2×3 factorial session data (UserExpertise × AI_Assistance × BiasType)
+with 4-stage responses. Scoring is deferred to the dashboard. Writes per‑session
+JSON files under exports/simulated_datasets/dataset_N and a summary file.
 """
 
+from __future__ import annotations
+
+# ================================
+# STANDARD LIBRARY IMPORTS
+# ================================
 import os
 import json
-import random
+import subprocess
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
-import pandas as pd
+from typing import Any, Dict, List, Optional, Tuple
+
+# ================================
+# THIRD-PARTY IMPORTS
+# ================================
 import numpy as np
+import pandas as pd
 
-# Import project modules
-from src.llm_feedback import generate_stage_feedback  # 🔄 Injected for tutor feedback
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from src.models import UserExpertise, BiasType, Domain
-from src.scoring_engine import calculate_comprehensive_scores
-from config import EXPORTS_DIR
-
-# Safety fallback for domain mapping
+# ================================
+# PROJECT IMPORTS 
+# ================================
 try:
-    from src.models import Domain
-    DOMAIN_MAPPING_AVAILABLE = True
-except ImportError:
-    DOMAIN_MAPPING_AVAILABLE = False
-    print("⚠️ Domain mapping not available - using string values")
+    from src.llm_feedback import generate_stage_feedback 
+except Exception: 
+    generate_stage_feedback = None  
 
+from src.models import BiasType, UserExpertise
+
+# ================================
+# CONSTANTS & PATHS 
+# ================================
+EXPORTS_DIR: Path = Path("exports")
+OUTPUT_DIR: Path = EXPORTS_DIR / "simulated_datasets"
+
+# Factorial design: 2×2×3 × replicates
+DEFAULT_REPLICATES_PER_CONDITION: int = 3
+STAGE_COUNT: int = 4
+
+# ================================
+# UTILS
+# ================================
 def convert_numpy(obj: Any) -> Any:
-    """Convert NumPy types to native Python types for JSON serialization."""
-    if isinstance(obj, (np.floating,)): 
+    """Convert NumPy scalars to native Python types for JSON serialization."""
+    if isinstance(obj, np.floating):
         return float(obj)
-    if isinstance(obj, (np.integer,)):   
+    if isinstance(obj, np.integer):
         return int(obj)
-    return str(obj)
- 
-# =============================
-# CONFIGURATION
-# =============================
+    return obj
 
-# Experimental design parameters
-NUM_REPLICATES_PER_CONDITION = 3  # 2×2×3×3 = 36 sessions total
-STAGE_COUNT = 4
-OUTPUT_DIR = Path(EXPORTS_DIR) / "simulated_datasets"
-LOG_FILE = Path(EXPORTS_DIR) / "simulation_log.json"
+def _next_available_name(base_dir: Path, prefix: str = "dataset") -> Path:
+    """Return base_dir/prefix_N where N is the next available integer."""
+    base_dir.mkdir(parents=True, exist_ok=True)
+    nums: List[int] = []
+    for p in base_dir.iterdir():
+        if p.is_dir() and p.name.startswith(f"{prefix}_"):
+            try:
+                nums.append(int(p.name.split("_", 1)[1]))
+            except Exception:
+                pass
+    n = max(nums) + 1 if nums else 1
+    return base_dir / f"{prefix}_{n}"
 
-# Response generation parameters
-RESPONSE_VARIATION_FACTOR = 0.3  # Controls response diversity
-MIN_WORDS_NOVICE = 15
-MAX_WORDS_NOVICE = 40
-MIN_WORDS_EXPERT = 25
-MAX_WORDS_EXPERT = 80
+def check_ollama_available() -> bool:
+    """True if `ollama list` responds; False otherwise."""
+    try:
+        res = subprocess.run(["ollama", "list"], capture_output=True, timeout=5)
+        return res.returncode == 0
+    except Exception:
+        return False
 
-# =============================
-# ENHANCED RESPONSE TEMPLATES
-# =============================
+def validate_experimental_completeness(items: List[Dict[str, Any]]) -> bool:
+    """Ensure all 12 condition codes (2×2×3) are present at least once."""
+    conds: set[str] = set()
+    for it in items:
+        cc = it.get("condition") or (
+            it.get("experimental_metadata", {}).get("condition_code")
+            if isinstance(it, dict)
+            else None
+        )
+        if isinstance(cc, str) and cc:
+            conds.add(cc)
+    expected = 12
+    if len(conds) < expected:
+        raise ValueError(
+            f"❌ Incomplete dataset: {len(conds)}/{expected} conditions present"
+        )
+    print(f"✅ All {expected} experimental conditions present")
+    return True
 
-RESPONSE_TEMPLATES = {
-    "novice": {
-        "openings": [
-            "I think the main issue here is",
-            "From what I can see,",
-            "My initial reaction is that",
-            "Based on my experience,",
-            "It seems to me that",
-            "I would approach this by"
-        ],
-        "reasoning_patterns": [
-            "following my gut instinct",
-            "looking at the obvious patterns",
-            "using what worked before",
-            "going with my first impression",
-            "applying common sense",
-            "focusing on the key details"
-        ],
-        "conclusions": [
-            "so I believe this is the right approach.",
-            "which leads me to think we should proceed.",
-            "therefore my recommendation would be to act quickly.",
-            "so I'm confident in this assessment.",
-            "which is why I think this is the best option.",
-            "so this seems like the most logical choice."
-        ]
-    },
-    "expert": {
-        "openings": [
-            "Drawing from established protocols,",
-            "Based on systematic analysis,",
-            "Considering multiple factors,",
-            "From a strategic perspective,",
-            "Taking into account best practices,",
-            "Using a structured approach,"
-        ],
-        "reasoning_patterns": [
-            "examining both primary and secondary indicators",
-            "cross-referencing multiple data sources",
-            "applying systematic decision-making frameworks",
-            "considering potential alternative explanations",
-            "evaluating risks and benefits comprehensively",
-            "incorporating lessons learned from similar cases"
-        ],
-        "conclusions": [
-            "leading to a measured recommendation for action.",
-            "supporting a cautious but decisive approach.",
-            "indicating the need for further verification before proceeding.",
-            "suggesting a multi-staged implementation strategy.",
-            "recommending continued monitoring of key indicators.",
-            "supporting the proposed course of action with reservations noted."
-        ]
-    }
-}
-
-STAGE_SPECIFIC_CONTENT = {
-    0: {  # Primary Analysis
-        "novice": "The situation appears straightforward based on the information presented.",
-        "expert": "Initial assessment requires careful evaluation of all available evidence and context."
-    },
-    1: {  # Cognitive Factors  
-        "novice": "I'm relying on my experience and what feels right in this situation.",
-        "expert": "Several cognitive factors may be influencing the decision-making process here."
-    },
-    2: {  # Mitigation Strategies
-        "novice": "To avoid problems, I would double-check the important details.",
-        "expert": "Implementing systematic verification processes and seeking independent validation would be advisable."
-    },
-    3: {  # Transfer Learning
-        "novice": "This approach could probably work in other similar situations too.",
-        "expert": "The principles identified here have broader applicability across multiple professional contexts."
-    }
-}
-
-# =============================
-# SIMULATED USER GENERATOR CLASS
-# =============================
-
+# ================================
+# GENERATOR
+# ================================
 class SimulatedUserGenerator:
     """
     Generates realistic simulated user sessions for experimental research.
-    
-    Academic Purpose: Creates controlled experimental data while maintaining
-    realistic variation patterns for valid statistical analysis.
+
+    Architecture (Option B):
+    - LLM-only responses (no template fallback).
+    - Scoring deferred to dashboard (on-load), using per-stage `ideal_answer`.
     """
-    
-    def __init__(self, scenarios_csv_path: str = "data/scenarios.csv"):
-        """Initialize generator with scenario database."""
-        self.scenarios_df = None
+
+    def __init__(
+        self,
+        scenarios_csv_path: str = "data/scenarios.csv",
+        replicates_per_condition: int = DEFAULT_REPLICATES_PER_CONDITION,
+        seed: int | None = None,
+        model_name: str = "llama3.2:instruct",
+        target_words: int | None = None,
+    ) -> None:
         self.scenarios_csv_path = scenarios_csv_path
-        self.generated_sessions = []
-        self.generation_log = []
-        
-        # Ensure output directory exists
+        self.replicates_per_condition = int(replicates_per_condition)
+        self.model_name = model_name
+        self.target_words = int(target_words) if target_words else None
+
+        # Deterministic RNG for scenario sampling
+        self._seed = seed
+        self._rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+
+        self.scenarios_df: Optional[pd.DataFrame] = None
+        self.generated_sessions: List[Dict[str, Any]] = []
+        self.generation_log: List[Dict[str, Any]] = []
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
+
+
+    # ----- Scenarios -----
     def load_scenarios(self) -> bool:
-        """Load and validate scenarios database."""
+        """Load the scenarios CSV (with fallbacks) and validate required columns"""
         try:
-            if not os.path.exists(self.scenarios_csv_path):
-                print(f"❌ Scenarios file not found: {self.scenarios_csv_path}")
+            # 1) Path fallback: try common locations if the provided path doesn't exist
+            candidate_paths = [
+                self.scenarios_csv_path,
+                "/mnt/data/scenarios.csv",   # Chat upload path (preferred if present)
+                "data/scenarios.csv",
+                "scenarios.csv",
+            ]
+            csv_path = None
+            for cand in candidate_paths:
+                if cand and Path(cand).exists():
+                    csv_path = cand
+                    break
+
+            if not csv_path:
+                print(f"❌ Scenarios file not found. Tried: {candidate_paths}")
                 return False
-            
-            self.scenarios_df = pd.read_csv(self.scenarios_csv_path)
-            print(f"✅ Loaded {len(self.scenarios_df)} scenarios")
+
+            df = pd.read_csv(csv_path)
+
+            # 2) Column schema check (fail fast with a clear error)
+            required_cols = {
+                "scenario_id", "domain", "scenario_text",
+                "primary_prompt", "follow_up_1", "follow_up_2", "follow_up_3",
+                "ideal_primary_answer", "ideal_answer_1", "ideal_answer_2", "ideal_answer_3",
+                "bias_type",
+            }
+            missing_cols = [c for c in required_cols if c not in df.columns]
+            if missing_cols:
+                print(f"❌ Missing required columns: {missing_cols}")
+                return False
+
+            # 3) Bias types present check (your three core biases)
+            required_biases = {"Confirmation", "Anchoring", "Availability"}
+            available = set(df["bias_type"].dropna().astype(str).unique().tolist())
+            missing_biases = required_biases - available
+            if missing_biases:
+                print(f"❌ Missing bias types in CSV: {sorted(missing_biases)}")
+                return False
+
+            self.scenarios_df = df
+            print(f"✅ Loaded {len(df)} scenarios from {csv_path} | biases: {sorted(available)}")
             return True
-            
+
         except Exception as e:
             print(f"❌ Failed to load scenarios: {e}")
             return False
-    
+
     def get_scenario_for_bias(self, bias_type: BiasType) -> Optional[pd.Series]:
-        """Get random scenario matching the specified bias type."""
+        """Sample a random scenario row for the given bias type"""
         if self.scenarios_df is None:
             return None
-        
-        # FIXED: Use correct CSV format mapping
-        csv_bias_name = {
+        csv_bias = {
             BiasType.CONFIRMATION_BIAS: "Confirmation",
-            BiasType.ANCHORING_BIAS: "Anchoring", 
-            BiasType.AVAILABILITY_HEURISTIC: "Availability"
+            BiasType.ANCHORING_BIAS: "Anchoring",
+            BiasType.AVAILABILITY_HEURISTIC: "Availability",
         }.get(bias_type)
-        
-        if not csv_bias_name:
+        if not csv_bias:
             return None
-        
-        matching_scenarios = self.scenarios_df[
-            self.scenarios_df['bias_type'] == csv_bias_name
-        ]
-        
-        if matching_scenarios.empty:
-            print(f"⚠️ No scenarios found for bias type: {csv_bias_name}")
+        sub = self.scenarios_df[self.scenarios_df["bias_type"] == csv_bias]
+        if sub.empty:
+            print(f"⚠️ No scenarios for bias type: {csv_bias}")
             return None
-        
-        return matching_scenarios.sample(n=1).iloc[0]
-    
+        # use seeded RNG for reproducibility
+        return sub.sample(
+            n=1,
+            random_state=int(self._rng.integers(0, 2**31 - 1))
+        ).iloc[0]
 
-    def generate_llama3_response(self, scenario: dict, stage: int, expertise: UserExpertise, ai_assistance: bool) -> Tuple[str, float]:
-        """
-        Generates a realistic response using LLaMA3 via Ollama based on scenario, stage, and experimental condition.
-        Replaces template-based generation with prompt-based LLM reasoning.
-        """
-        from src.llm_utils import generate_ollama_response
+    # ----- Response generation -----
+    def generate_llama3_response(
+        self,
+        scenario: Dict[str, Any],
+        stage: int,
+        expertise: UserExpertise,
+        ai_assistance: bool,
+    ) -> Tuple[str, float]:
+        """Generate a stage response via Ollama.
 
-        # Map stage to prompt field
-        stage_prompts = [
-            "primary_prompt", "follow_up_1", "follow_up_2", "follow_up_3"
-        ]
-        stage_names = [
-            "Primary Analysis", "Cognitive Factors", "Mitigation Strategies", "Transfer Learning"
-        ]
+        Returns:
+            (response_text, response_time_seconds)
+        """
+        from src.llm_utils import generate_ollama_response  # lazy import
+
+        stage_prompts = ["primary_prompt", "follow_up_1", "follow_up_2", "follow_up_3"]
+        stage_names = ["Primary Analysis", "Cognitive Factors", "Mitigation Strategies", "Transfer Learning"]
 
         prompt_field = stage_prompts[stage]
         stage_name = stage_names[stage]
@@ -226,324 +230,304 @@ class SimulatedUserGenerator:
         scenario_text = scenario.get("scenario_text", "")
         stage_prompt = scenario.get(prompt_field, "")
 
-        # Build prompt dynamically based on condition
         expertise_str = "novice" if expertise == UserExpertise.NOVICE else "expert"
-        ai_note = "You have access to AI guidance if needed." if ai_assistance else "You are working without any AI assistance."
+        ai_note = (
+            "You have access to AI guidance if needed."
+            if ai_assistance
+            else "You are working without any AI assistance."
+        )
 
-        # This prompt will be passed to LLaMA3 via Ollama
+        length_hint = ""
+        if self.target_words:
+            length_hint = f"\n\nAim for approximately {self.target_words} words (±20%)."
+
         full_prompt = (
             f"You are a {expertise_str} professional operating in the {domain} domain.\n\n"
             f"Scenario:\n{scenario_text}\n\n"
             f"Task ({stage_name}):\n{stage_prompt}\n\n"
             f"{ai_note}\n"
-            "Please respond in 3–5 sentences. Use your own reasoning. Do NOT mention any cognitive biases by name."
+            "Please respond in your own words; avoid copying the prompt."
+            f"{length_hint}"
         )
+        if stage == 3:
+            full_prompt += (
+                "\n\nSpecifically consider how these principles could apply to other "
+                "professional domains and decision-making contexts."
+            )
 
-        # Run Ollama subprocess
         try:
-            response = generate_ollama_response(full_prompt)
-        except Exception as e:
-            response = "⚠️ Ollama generation failed."
+            # Use the model set on the generator (dashboard-controlled)
+            response = generate_ollama_response(full_prompt, model=self.model_name)
+        except Exception:
+            response = f"⚠️ Ollama generation failed at {stage_name}."
 
-        # Simulate realistic timing (slightly faster per stage)
         base_time = 45 if expertise == UserExpertise.EXPERT else 30
         response_time = base_time * (stage + 1) * 0.85
-
         return response, response_time
-    
-    def _generate_extra_detail(self, expertise: UserExpertise, stage: int) -> str:
-        """Generate additional detail based on expertise and stage."""
-        if expertise == UserExpertise.EXPERT:
-            details = [
-                "Additionally, past cases have shown similar patterns.",
-                "Cross-referencing with established protocols supports this approach.",
-                "Multiple factors need to be considered before final implementation.",
-                "Risk assessment indicates this is within acceptable parameters."
-            ]
-        else:
-            details = [
-                "This feels like the right direction to take.",
-                "I've seen something similar work before.",
-                "The key seems to be acting decisively here.",
-                "Trust and experience guide this decision."
-            ]
-        
-        return random.choice(details)
-    
-    def simulate_guidance_usage(self, ai_assistance: bool, expertise: UserExpertise, 
-                               stage: int) -> bool:
-        """Simulate realistic AI guidance usage patterns."""
+
+    # ----- Behavioural controls -----
+    def simulate_guidance_usage(
+        self, ai_assistance: bool, expertise: UserExpertise, stage: int
+    ) -> bool:
+        """Return True if guidance is requested at this stage (stochastic)"""
         if not ai_assistance:
             return False
-        
-        # Realistic usage patterns based on expertise and stage
-        if expertise == UserExpertise.NOVICE:
-            # Novices use guidance more frequently, especially early stages
-            usage_probability = 0.7 if stage < 2 else 0.5
-        else:
-            # Experts use guidance more selectively
-            usage_probability = 0.3 if stage < 2 else 0.4
-        
-        return random.random() < usage_probability
-    
-    def create_session_data(self, session_id: str, expertise: UserExpertise, 
-                          ai_assistance: bool, bias_type: BiasType) -> Optional[Dict]:
-        """Create complete simulated session data."""
-        
-        # Get scenario
-        scenario_row = self.get_scenario_for_bias(bias_type)
-        if scenario_row is None:
-            return None
-        
-        scenario_dict = scenario_row.to_dict()
-        
-        # Create experimental session metadata
-        session_start_time = datetime.now()
-        
-        llm_feedback_per_stage = []
+        stage_complexity = {0: 0.3, 1: 0.6, 2: 0.8, 3: 0.5}
+        weight = stage_complexity.get(stage, 0.5)
+        base = 0.7 if expertise == UserExpertise.NOVICE else 0.4
+        prob = max(0.0, min(1.0, base * weight))
+        # Use class RNG for reproducibility under seeding
+        return float(self._rng.random()) < prob
 
-        # Generate responses for all 4 stages
-        stage_responses = []
-        cumulative_time = 0
-        
+    def _assess_session_quality(self, stages: List[Dict[str, Any]]) -> str:
+        """Heuristic quality label from word counts and elapsed time"""
+        avg_words = sum(r["word_count"] for r in stages) / max(len(stages), 1)
+        total_time_min = stages[-1]["cumulative_time_seconds"] / 60.0
+        if avg_words >= 25 and total_time_min >= 3:
+            return "high"
+        if avg_words >= 15 and total_time_min >= 2:
+            return "moderate"
+        return "low"
+
+    # ----- Build one session -----
+    def create_session_data(
+        self,
+        session_id: str,
+        expertise: UserExpertise,
+        ai_assistance: bool,
+        bias_type: BiasType,
+    ) -> Optional[Dict[str, Any]]:
+        """Build a 4‑stage session record (no scoring)"""
+        row = self.get_scenario_for_bias(bias_type)
+        if row is None:
+            return None
+        scenario = row.to_dict()
+
+        session_start = datetime.now()
+        stage_responses: List[Dict[str, Any]] = []
+        llm_feedback_per_stage: List[Optional[str]] = []
+        cumulative_time = 0.0
+
+        ideal_fields = ["ideal_primary_answer", "ideal_answer_1", "ideal_answer_2", "ideal_answer_3"]
+
         for stage in range(STAGE_COUNT):
-            # Generate the response using LLaMA3 via Ollama
+            # LLM‑only generation
             response_text, response_time = self.generate_llama3_response(
-                scenario_dict, stage, expertise, ai_assistance
+                scenario, stage, expertise, ai_assistance
             )
-            
             cumulative_time += response_time
-            
-            
-            # 🔄 Tutor Feedback (only for AI-assisted sessions)
-            tutor_feedback = None
-            if ai_assistance:
+
+            # Optional tutor feedback
+            tutor_feedback: Optional[str] = None
+            if ai_assistance and (generate_stage_feedback is not None):
                 try:
-                    tutor_feedback = generate_stage_feedback(scenario_dict, stage, response_text)
-                except Exception as e:
+                    tutor_feedback = generate_stage_feedback(scenario, stage, response_text)
+                except Exception:
                     tutor_feedback = "⚠️ Feedback generation failed."
-            
-            # Simulate guidance usage
+
             guidance_used = self.simulate_guidance_usage(ai_assistance, expertise, stage)
-            
-            # Calculate scores using existing scoring engine
-            ideal_answer_fields = [
-                'ideal_primary_answer', 'ideal_answer_1', 
-                'ideal_answer_2', 'ideal_answer_3'
-            ]
-            ideal_answer = scenario_dict.get(ideal_answer_fields[stage], "")
-            
-            try:
-                scores = calculate_comprehensive_scores(
-                    response=response_text,
-                    ideal_answer=ideal_answer,
-                    scenario=scenario_dict
-                )
-            except Exception as e:
-                print(f"⚠️ Scoring failed for session {session_id}, stage {stage}: {e}")
-                scores = {"error": str(e)}
-            
-            stage_data = {
-                "llm_feedback": tutor_feedback,
-                "stage_number": stage,
-                "stage_name": ["Primary Analysis", "Cognitive Factors", 
-                              "Mitigation Strategies", "Transfer Learning"][stage],
-                "response_text": response_text,
-                "response_time_seconds": response_time,
-                "cumulative_time_seconds": cumulative_time,
-                "guidance_requested": bool(guidance_used),
-                "word_count": len(response_text.split()),
-                "character_count": len(response_text),
-                "quality_level": "high" if len(response_text.split()) >= 40 else "mid" if len(response_text.split()) >= 20 else "low",
-                "scores": scores,
-                "timestamp": (session_start_time + timedelta(seconds=cumulative_time)).isoformat()
-            }
-            
-            stage_responses.append(stage_data)
+            ideal_answer = scenario.get(ideal_fields[stage], "")
+
+            stage_responses.append(
+                {
+                    "llm_feedback": tutor_feedback,
+                    "stage_number": stage,
+                    "stage_name": ["Primary Analysis", "Cognitive Factors", "Mitigation Strategies", "Transfer Learning"][stage],
+                    "response_text": response_text,
+                    "response_time_seconds": response_time,
+                    "cumulative_time_seconds": cumulative_time,
+                    "guidance_requested": bool(guidance_used),
+                    "word_count": len(response_text.split()),
+                    "character_count": len(response_text),
+                    "quality_level": ("high" if len(response_text.split()) >= 40
+                    else "moderate" if len(response_text.split()) >= 20
+                    else "low"),
+                    # crucial for dashboard scoring:
+                    "ideal_answer": ideal_answer,
+                    # scores intentionally omitted in Option B
+                    "timestamp": (session_start + timedelta(seconds=cumulative_time)).isoformat(),
+                }
+            )
             llm_feedback_per_stage.append(tutor_feedback)
-        
-        # Compile complete session data
-        session_data = {
+
+        session_data: Dict[str, Any] = {
             "session_metadata": {
                 "session_id": session_id,
                 "is_simulated": True,
                 "simulation_version": "2.0",
                 "generated_timestamp": datetime.now().isoformat(),
-                
-                # Experimental condition
                 "user_expertise": expertise.value,
                 "ai_assistance_enabled": ai_assistance,
-                "bias_type": scenario_dict['bias_type'],
-                "domain": scenario_dict['domain'],
-                "scenario_id": scenario_dict['scenario_id'],
-                
-                # Session analytics
-                "total_session_time_minutes": cumulative_time / 60,
+                "bias_type": scenario["bias_type"],
+                "domain": scenario["domain"],
+                "scenario_id": scenario["scenario_id"],
+                "total_session_time_minutes": cumulative_time / 60.0,
                 "total_stages_completed": STAGE_COUNT,
                 "total_guidance_requests": sum(1 for r in stage_responses if r["guidance_requested"]),
                 "total_word_count": sum(r["word_count"] for r in stage_responses),
-                "session_quality": self._assess_session_quality(stage_responses)
+                "session_quality": self._assess_session_quality(stage_responses),
             },
-            
-            "scenario_data": scenario_dict,
+            "scenario_data": scenario,  # used by dashboard scorer
             "stage_responses": stage_responses,
             "llm_feedback_per_stage": llm_feedback_per_stage,
-            
             "experimental_metadata": {
                 "condition_code": f"{expertise.value}_{ai_assistance}_{bias_type.value}",
                 "factorial_design": "2x2x3",
                 "bias_revelation_timing": "post_completion",
-                "data_collection_method": "simulated_4stage_progression"
-            }
+                "data_collection_method": "simulated_4stage_progression",
+            },
         }
-        
         return session_data
-    
-    def _assess_session_quality(self, stage_responses: List[Dict]) -> str:
-        """Assess simulated session quality for research validation."""
-        avg_words = sum(r["word_count"] for r in stage_responses) / len(stage_responses)
-        total_time = stage_responses[-1]["cumulative_time_seconds"] / 60  # minutes
-        
-        if avg_words >= 25 and total_time >= 3:
-            return "high"
-        elif avg_words >= 15 and total_time >= 2:
-            return "moderate"
-        else:
-            return "low"
-    
-    def generate_full_dataset(self, progress_callback=None) -> Dict[str, Any]:
-        """
-        Generate complete simulated dataset for 2×2×3 factorial design.
-        
-        Args:
-            progress_callback: Optional function to call with progress updates
-        
+
+    # ----- Generate full dataset -----
+    def generate_full_dataset(
+        self,
+        progress_callback=None,
+        dataset_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Generate a 2×2×3 dataset (12 × replicates).
         Returns:
-            Dict with generation results and metadata
+            {"success": bool, "summary": {...}, "output_directory": str}
         """
         if not self.load_scenarios():
             return {"success": False, "error": "Failed to load scenarios"}
-        
-        print("🚀 Starting simulated dataset generation...")
-        print(f"📊 Target: {2 * 2 * 3 * NUM_REPLICATES_PER_CONDITION} sessions")
-        
-        generated_sessions = []
-        failed_sessions = []
-        session_counter = 0
-        total_sessions = 2 * 2 * 3 * NUM_REPLICATES_PER_CONDITION
-        
-        # Create timestamped output directory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = OUTPUT_DIR / f"simulation_{timestamp}"
+        if not check_ollama_available():
+            return {"success": False, "error": "Ollama is not available. Start it and ensure your model is installed."}
+
+        total_sessions = 2 * 2 * 3 * self.replicates_per_condition
+        print("🚀 Starting simulated dataset generation…")
+        print(f"📊 Target: {total_sessions} sessions")
+
+        # Decide output directory
+        if dataset_name:
+            desired = OUTPUT_DIR / dataset_name
+            output_dir = desired if not desired.exists() else _next_available_name(OUTPUT_DIR, dataset_name)
+        else:
+            output_dir = _next_available_name(OUTPUT_DIR, "dataset")
         output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Generate sessions for all conditions
+
+        generated_sessions: List[Dict[str, Any]] = []
+        failed_sessions: List[Dict[str, Any]] = []
+        session_counter = 0
+
         for expertise in [UserExpertise.NOVICE, UserExpertise.EXPERT]:
             for ai_assistance in [False, True]:
                 for bias_type in [BiasType.CONFIRMATION_BIAS, BiasType.ANCHORING_BIAS, BiasType.AVAILABILITY_HEURISTIC]:
-                    for replicate in range(1, NUM_REPLICATES_PER_CONDITION + 1):
-                        
+                    for replicate in range(1, self.replicates_per_condition + 1):
                         session_counter += 1
                         session_id = f"SIM_{expertise.value}_{ai_assistance}_{bias_type.value}_{replicate:02d}"
-                        
-                        # Progress callback
-                        if progress_callback:
-                            progress_callback(session_counter, total_sessions, session_id)
-                        
-                        try:
-                            # Generate session data
-                            session_data = self.create_session_data(
-                                session_id, expertise, ai_assistance, bias_type
-                            )
-                            
-                            if session_data:
-                                # Save session file
-                                session_file = output_dir / f"{session_id}.json"
-                                with open(session_file, 'w', encoding='utf-8') as f:
-                                    json.dump(session_data, f, indent=2, ensure_ascii=False, default=convert_numpy)
 
-                                
-                                generated_sessions.append({
-                                    "session_id": session_id,
-                                    "file_path": str(session_file),
-                                    "condition": session_data["experimental_metadata"]["condition_code"],
-                                    "quality": session_data["session_metadata"]["session_quality"]
-                                })
-                                
-                                print(f"✅ Generated: {session_id}")
-                            else:
+                        if progress_callback:
+                            try:
+                                progress_callback(session_counter, total_sessions, session_id)
+                            except Exception:
+                                pass  # UI callbacks must not break generation
+
+                        try:
+                            session_data = self.create_session_data(session_id, expertise, ai_assistance, bias_type)
+                            if session_data is None:
                                 failed_sessions.append({"session_id": session_id, "error": "No scenario available"})
                                 print(f"❌ Failed: {session_id} - No scenario available")
-                                
+                                continue
+
+                            fp = output_dir / f"{session_id}.json"
+                            with open(fp, "w", encoding="utf-8") as f:
+                                json.dump(session_data, f, indent=2, ensure_ascii=False, default=convert_numpy)
+
+                            generated_sessions.append(
+                                {
+                                    "session_id": session_id,
+                                    "file_path": str(fp),
+                                    "condition": session_data["experimental_metadata"]["condition_code"],
+                                    "quality": session_data["session_metadata"]["session_quality"],
+                                }
+                            )
+                            print(f"✅ Generated: {session_id}")
                         except Exception as e:
                             failed_sessions.append({"session_id": session_id, "error": str(e)})
                             print(f"❌ Failed: {session_id} - {e}")
-        
-        # Generate summary and log
-        generation_summary = {
+
+        # Ensure 12 conditions present
+        try:
+            validate_experimental_completeness(generated_sessions)
+        except Exception as e:
+            summary = {
+                "generation_metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "simulation_version": "2.0",
+                    "output_directory": str(output_dir),
+                    "total_attempted": total_sessions,
+                    "total_generated": len(generated_sessions),
+                    "total_failed": len(failed_sessions),
+                    "model_name": self.model_name,
+                    "seed": self._seed,
+                    "target_words": self.target_words,
+                },
+                "generated_sessions": generated_sessions,
+                "failed_sessions": failed_sessions,
+                "error": str(e),
+            }
+            with open(output_dir / "generation_summary.json", "w", encoding="utf-8") as f:
+                json.dump(summary, f, indent=2, ensure_ascii=False)
+            return {"success": False, "error": str(e), "output_directory": str(output_dir)}
+
+        # Success summary
+        summary = {
             "generation_metadata": {
                 "timestamp": datetime.now().isoformat(),
                 "simulation_version": "2.0",
                 "output_directory": str(output_dir),
                 "total_attempted": total_sessions,
                 "total_generated": len(generated_sessions),
-                "total_failed": len(failed_sessions)
+                "total_failed": len(failed_sessions),
+                "model_name": self.model_name,
+                "seed": self._seed,
+                "target_words": self.target_words,
             },
             "experimental_design": {
                 "factors": ["user_expertise", "ai_assistance", "bias_type"],
                 "levels": [2, 2, 3],
-                "replicates_per_condition": NUM_REPLICATES_PER_CONDITION,
-                "theoretical_total": total_sessions
+                "replicates_per_condition": self.replicates_per_condition,
+                "theoretical_total": total_sessions,
             },
             "generated_sessions": generated_sessions,
             "failed_sessions": failed_sessions,
-            "quality_distribution": self._analyze_quality_distribution(generated_sessions)
+            "quality_distribution": self._analyze_quality_distribution(generated_sessions),
         }
-        
-        # Save generation log
-        log_file = output_dir / "generation_summary.json"
-        with open(log_file, 'w', encoding='utf-8') as f:
-            json.dump(generation_summary, f, indent=2, ensure_ascii=False)
-        
+        with open(output_dir / "generation_summary.json", "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
+
         print(f"📁 Saved to: {output_dir}")
         print(f"✅ Successfully generated: {len(generated_sessions)}/{total_sessions} sessions")
-        
-        return {
-            "success": True,
-            "summary": generation_summary,
-            "output_directory": str(output_dir)
-        }
-    
-    def _analyze_quality_distribution(self, sessions: List[Dict]) -> Dict[str, int]:
-        """Analyze quality distribution of generated sessions."""
-        quality_counts = {"high": 0, "moderate": 0, "low": 0}
-        for session in sessions:
-            quality = session.get("quality", "unknown")
-            if quality in quality_counts:
-                quality_counts[quality] += 1
-        return quality_counts
+        return {"success": True, "summary": summary, "output_directory": str(output_dir)}
 
-# =============================
+    # ----- Diagnostics -----
+    def _analyze_quality_distribution(self, sessions: List[Dict[str, Any]]) -> Dict[str, int]:
+        counts = {"high": 0, "moderate": 0, "low": 0}
+        for s in sessions:
+            q = s.get("quality", "unknown")
+            if q in counts:
+                counts[q] += 1
+        return counts
+
+# ================================
 # STANDALONE EXECUTION
-# =============================
+# ================================
+def main() -> None:
+    gen = SimulatedUserGenerator()
 
-def main():
-    """Main execution function for standalone running."""
-    generator = SimulatedUserGenerator()
-    
-    def progress_callback(current: int, total: int, session_id: str):
-        print(f"Progress: {current}/{total} ({current/total*100:.1f}%) - {session_id}")
-    
-    result = generator.generate_full_dataset(progress_callback=progress_callback)
-    
-    if result["success"]:
+    def progress(cur: int, total: int, sid: str) -> None:
+        print(f"Progress: {cur}/{total} ({(cur/max(total,1))*100:.1f}%) - {sid}")
+
+    res = gen.generate_full_dataset(progress_callback=progress)  # auto dataset_#
+    if res.get("success"):
+        s = res["summary"]
         print("\n🎉 Simulation Generation Complete!")
-        summary = result["summary"]
-        print(f"📊 Generated: {summary['generation_metadata']['total_generated']} sessions")
-        print(f"📁 Location: {summary['generation_metadata']['output_directory']}")
-        print(f"🔗 Quality Distribution: {summary['quality_distribution']}")
+        print(f"📊 Generated: {s['generation_metadata']['total_generated']} sessions")
+        print(f"📁 Location: {s['generation_metadata']['output_directory']}")
+        print(f"🔗 Quality Distribution: {s['quality_distribution']}")
     else:
-        print(f"❌ Generation failed: {result.get('error', 'Unknown error')}")
+        print(f"❌ Generation failed: {res.get('error', 'Unknown error')}")
 
 if __name__ == "__main__":
     main()
