@@ -13,8 +13,8 @@ Key Features:
 - 6‑dimension score visualization using stored results (no duplicate scoring)
 - Always‑visible feedback containers for consistent UX
 - Bias debrief with concise educational framing
-- Research‑grade interaction logging
 """
+
 import streamlit as st
 import time
 from datetime import datetime
@@ -24,7 +24,7 @@ import config
 from src.session_manager import safe_get_session_value, safe_set_session_value, SessionManager
 from src.models import UserExpertise, UserResponse, StageType
 from src.llm_feedback import generate_stage_feedback
-from utils import apply_compact_layout
+from src.scoring_engine import map_bias_count_to_level
 
 # Stage configuration
 STAGE_NAMES = [
@@ -62,6 +62,25 @@ class UIComponents:
         """Initialise the UIComponents instance with configuration and session context"""
         pass
     
+    @staticmethod
+    def _quartile_label(x: float) -> str:
+        """
+        Map a 1–4 aggregate score to a plain‑English band used across the UI.
+        Keep wording consistent everywhere.
+        """
+        if x >= 3.5:
+            return "Advanced"
+        if x >= 2.5:
+            return "Proficient"
+        if x >= 1.5:
+            return "Competent"
+        return "Foundational"
+
+    @staticmethod
+    def _bands_legend() -> str:
+        """Single‑line legend to keep the results page self‑explaining."""
+        return "Bands: Advanced (≥3.5) • Proficient (≥2.5) • Competent (≥1.5) • Foundational (<1.5)"
+
     def show_progress_toast(self):
         """Show progress toast notification after scenario is loaded"""
         if (safe_get_session_value('interaction_flow') == 'scenario' and 
@@ -75,7 +94,6 @@ class UIComponents:
     def render_experimental_setup(self, scenarios_df, scenario_handler, 
                                  session_manager, data_collector) -> bool:
         """Render the participant setup interface for expertise level and AI assistance selection"""
-        apply_compact_layout()
         
         st.markdown('<h2 class="section-header">🎯 Experimental Training Setup</h2>', unsafe_allow_html=True)
         
@@ -93,6 +111,10 @@ class UIComponents:
         
         # Factor selection
         expertise_selected = self._render_expertise_selection()
+
+        # NEW: Domain selector (optional; bias remains random)
+        _ = self._render_domain_selection(scenarios_df)
+
         assistance_selected = self._render_assistance_selection()
         
         if expertise_selected and assistance_selected is not None:
@@ -143,6 +165,42 @@ class UIComponents:
         
         return current_expertise
     
+    def _render_domain_selection(self, scenarios_df) -> Optional[str]:
+        """Render the interface for selecting a domain (optional; bias remains random)."""
+        st.markdown("### 🏥 Domain Preference")
+        st.markdown("Choose a domain for your scenario. The cognitive bias will still be random within the selected domain.")
+
+        # Build options
+        domains = sorted({str(d) for d in scenarios_df['domain'].dropna().unique()})
+        options = ["All domains"] + domains
+
+        # Respect any previously selected domain in session
+        previous = safe_get_session_value('selected_domain', None)
+        try:
+            default_index = options.index(previous) if previous in options else 0
+        except Exception:
+            default_index = 0
+
+        choice = st.selectbox(
+            "Select a domain:", 
+            options=options, 
+            index=default_index, 
+            help="Lock the domain only; bias remains random within the domain."
+        )
+
+        sm = SessionManager()
+        if choice == "All domains":
+            sm.set_selected_domain(None) 
+            return None
+        else:
+            from src.models import Domain
+            try:
+                domain_enum = Domain(choice)
+            except ValueError:
+                domain_enum = None
+            sm.set_selected_domain(str(domain_enum) if domain_enum else None)
+            return str(domain_enum) if domain_enum else None
+
     def _render_assistance_selection(self) -> Optional[bool]:
         """Render the interface for selecting whether AI assistance is enabled"""
         
@@ -192,24 +250,39 @@ class UIComponents:
         
         current_expertise = safe_get_session_value('user_expertise')
         current_assistance = safe_get_session_value('ai_assistance_enabled')
-        
+
         st.markdown("### 🔬 Experimental Condition Summary")
+
+        selected_domain = safe_get_session_value('selected_domain', None)
+        domain_label = getattr(selected_domain, 'value', selected_domain) if selected_domain else "All domains"
+
+        # Enum-safe → string, then Title Case
+        exp_label = getattr(current_expertise, 'value', current_expertise)
+        exp_label = (str(exp_label).title() if exp_label else "Unknown")
+
+        assist_label = "Enabled" if current_assistance else "Disabled"
+
         st.markdown(f"""
         <div class="experimental-condition-summary">
             <p style="color: var(--text-dark); margin: 0;">
-            <strong>Your experimental condition:</strong> {current_expertise.value.title()} Professional with AI Assistance {'Enabled' if current_assistance else 'Disabled'}
+            <strong>Your experimental condition:</strong> {exp_label} Professional with AI Assistance {assist_label}
+            </p>
+            <p style="color: var(--text-dark); margin: 0;">
+            <strong>Domain:</strong> {domain_label}
             </p>
         </div>
         """, unsafe_allow_html=True)
-        
+  
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if st.button("🚀 Begin Training Scenario", type="primary", use_container_width=True):
                 
                 selected_scenario = scenario_handler.select_balanced_scenario(
-                    current_expertise, current_assistance
+                    current_expertise,
+                    current_assistance,
+                    domain=(getattr(selected_domain, 'value', selected_domain) if selected_domain else None)
                 )
-                
+                            
                 if selected_scenario is None:
                     st.error("❌ Failed to assign training scenario. Please try again.")
                     return False
@@ -422,17 +495,10 @@ class UIComponents:
         strategy_count = scores.get('strategy_count', 0)
         metacog_count = scores.get('metacognition_count', 0)
         
-        # Calculate performance level
+        # Calculate scores and performance (unified 1–4 banding)
         avg_score = (semantic_score + originality_score + min(1.0, bias_count / 3.0)) / 3
-        
-        if avg_score >= 0.8:
-            performance_level = "excellent"
-        elif avg_score >= 0.6:
-            performance_level = "strong"
-        elif avg_score >= 0.4:
-            performance_level = "moderate"
-        else:
-            performance_level = "developing"
+        composite_1_to_4 = 1.0 + 3.0 * float(max(0.0, min(1.0, avg_score)))
+        performance_level = self._quartile_label(composite_1_to_4).lower() 
         
         # Generate strengths based on scores
         strengths = []
@@ -461,14 +527,7 @@ class UIComponents:
             improvements.append("Continue developing systematic analytical approaches")
         
         # Assess bias recognition level
-        if bias_count >= 3:
-            bias_recognition_level = "Excellent"
-        elif bias_count >= 2:
-            bias_recognition_level = "Strong"
-        elif bias_count >= 1:
-            bias_recognition_level = "Moderate"
-        else:
-            bias_recognition_level = "Developing"
+        bias_recognition_level = map_bias_count_to_level(int(bias_count))
         
         return {
             'performance_summary': f"Your {STAGE_NAMES[current_stage].lower()} shows {performance_level} engagement with the scenario.",
@@ -690,19 +749,19 @@ class UIComponents:
             analysis = feedback['performance_analysis']
             
             # Extract performance level from summary
-            summary = analysis['performance_summary'].lower()
-            if 'excellent' in summary:
+            summary = str(analysis.get('performance_summary', '')).lower()
+            if 'advanced' in summary:
                 performance_levels.append(4)
-            elif 'strong' in summary:
+            elif 'proficient' in summary:
                 performance_levels.append(3)
-            elif 'moderate' in summary:
+            elif 'competent' in summary:
                 performance_levels.append(2)
             else:
                 performance_levels.append(1)
             
             # Extract bias recognition level
-            bias_level = analysis['bias_recognition_score']
-            bias_mapping = {'Excellent': 4, 'Strong': 3, 'Moderate': 2, 'Developing': 1}
+            bias_level = str(analysis.get('bias_recognition_score', ''))
+            bias_mapping = {'Advanced': 4, 'Proficient': 3, 'Competent': 2, 'Foundational': 1}
             bias_scores.append(bias_mapping.get(bias_level, 2))
         
         # Calculate averages
@@ -711,14 +770,14 @@ class UIComponents:
         
         # Display overall metrics
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
-            overall_level = "Excellent" if avg_performance >= 3.5 else "Strong" if avg_performance >= 2.5 else "Moderate" if avg_performance >= 1.5 else "Developing"
-            st.metric("Overall Performance", overall_level)
-        
+            overall_label = self._quartile_label(avg_performance)
+            st.metric("Overall Performance", overall_label)
+
         with col2:
-            bias_level = "Excellent" if avg_bias >= 3.5 else "Strong" if avg_bias >= 2.5 else "Moderate" if avg_bias >= 1.5 else "Developing"
-            st.metric("Cognitive Awareness", bias_level)
+            bias_label = self._quartile_label(avg_bias)
+            st.metric("Cognitive Awareness", bias_label)
         
         with col3:
             st.metric("Analysis Depth", f"{avg_performance * 2.5:.1f}/10")

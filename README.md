@@ -102,6 +102,7 @@ python -m src.research_pipeline
 - Load this folder in the Dashboard to compute scores and run analyses.
 
 ---
+
 ## Research Questions & Dashboard Mapping
 
 The analyses in the Dashboard directly address the three core research questions:
@@ -117,6 +118,7 @@ To what extent do LLM-assisted responses exhibit parroting behaviour (high simil
 **RQ3 — Transfer Learning Across Domains**  
 How effectively do participants (or simulated personas) apply bias mitigation strategies learned in one domain (e.g., medical) to a different domain (e.g., military or emergency response)?  
 → Addressed in **Tab 3**: Transfer Learning.
+
 ---
 
 ## Marker Instructions

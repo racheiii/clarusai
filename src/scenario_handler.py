@@ -126,20 +126,33 @@ class ScenarioHandler:
         }
     
     # stratified scenario selection for balanced experimental design
-    def select_balanced_scenario(self, user_expertise: UserExpertise, ai_assistance: bool) -> Optional[pd.Series]:
+    def select_balanced_scenario(
+        self,
+        user_expertise: UserExpertise,
+        ai_assistance: bool,
+        domain: Optional[str] = None
+    ) -> Optional[pd.Series]:
         if self.scenarios_df is None or self.scenarios_df.empty:
             logger.error("Cannot select scenario - no scenarios available")
             return None
-        
+
         try:
             # Start with all available scenarios
             available_scenarios = self.scenarios_df.copy()
-            
+
+            # Optional domain filter (CSV values e.g., "Medical", "Military", "Emergency")
+            if domain:
+                filtered = available_scenarios[available_scenarios["domain"] == domain]
+                if not filtered.empty:
+                    available_scenarios = filtered
+                    logger.info(f"Applied domain filter: {domain}")
+                else:
+                    logger.warning(f"No scenarios found for domain '{domain}'; falling back to all domains.")
+
             # Apply cognitive load weighting based on expertise
             if user_expertise == UserExpertise.NOVICE:
-                # Prefer medium cognitive load for novice users
                 medium_load_scenarios = available_scenarios[
-                    available_scenarios['cognitive_load_level'] == 'Medium'
+                    available_scenarios["cognitive_load_level"] == "Medium"
                 ]
                 if not medium_load_scenarios.empty and random.random() < 0.7:
                     available_scenarios = medium_load_scenarios
@@ -161,12 +174,13 @@ class ScenarioHandler:
                 'selected_scenario': selected_scenario['scenario_id'],
                 'bias_type': selected_scenario['bias_type'],
                 'domain': selected_scenario['domain'],
+                'domain_preference': domain or 'any',
                 'cognitive_load': selected_scenario['cognitive_load_level'],
                 'selection_method': 'weighted_random',
                 'available_pool_size': len(available_scenarios),
                 'total_scenarios': len(self.scenarios_df)
             }
-            
+
             logger.info(f"Selected scenario {selected_scenario['scenario_id']} for condition {user_expertise.value}_{ai_assistance}")
             
             return selected_scenario

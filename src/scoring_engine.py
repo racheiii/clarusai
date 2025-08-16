@@ -101,7 +101,6 @@ def detect_bias_recognition(response: str, bias_type: Any) -> Tuple[int, str]:
 
     response_lc = response.lower()
 
-    # Use config helper to support both CSV ("Confirmation") and enum ("confirmation_bias")
     bias_raw = safe_enum_str(bias_type)
     keywords = config.get_bias_keywords(bias_raw)  # robust lookup via config
     keyword_hits = [kw for kw in keywords if kw.lower() in response_lc]
@@ -212,6 +211,19 @@ def measure_metacognition(response: str) -> Tuple[int, str]:
 
     return count, tag
 
+def map_bias_count_to_level(count: int) -> str:
+    """
+    Convert a per-stage bias_recognition count (0..N) into unified bands.
+    Counts of 0 = Foundational; 1 = Competent; 2 = Proficient; ≥3 = Advanced.
+    """
+    if count >= 3:
+        return "Advanced"
+    if count == 2:
+        return "Proficient"
+    if count == 1:
+        return "Competent"
+    return "Foundational"
+
 def calculate_comprehensive_scores(response: str, ideal_answer: str, scenario: Dict[str, Any]) -> Dict[str, Any]:
     bias_type = scenario.get("bias_type", "unknown")
     domain = scenario.get("domain", "unknown")
@@ -240,6 +252,8 @@ def calculate_comprehensive_scores(response: str, ideal_answer: str, scenario: D
         "domain_transferability": {"count": transfer_count, "tag": transfer_tag},
         "metacognitive_awareness": {"count": metacog_count, "tag": metacog_tag},
         "overall_quality_score": overall,
+        # New: standard, user-facing band for awareness
+        "bias_awareness_level": map_bias_count_to_level(bias_count),
         "confidence_flags": {
             "low_effort": len(response.split()) < 10,
             "high_similarity_risk": semantic_score > 0.75 and originality_score < 0.25
@@ -250,3 +264,4 @@ def calculate_comprehensive_scores(response: str, ideal_answer: str, scenario: D
             "model_loaded": MODEL_LOADED
         }
     }
+

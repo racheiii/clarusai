@@ -233,7 +233,7 @@ class SessionAnalytics:
     # Completion metrics
     all_stages_completed: bool
     completion_rate: float
-    session_quality: str  # 'excellent', 'good', 'acceptable', 'poor'
+    session_quality: str 
 
 @dataclass
 class ExperimentalSession:
@@ -446,55 +446,56 @@ class ExperimentalSession:
         else:
             return 'poor'
         
-def _scores_to_dict(self, scores):
-    d = scores.__dict__.copy()
-    ts = d.get('assessment_timestamp')
-    if isinstance(ts, datetime):
-        d['assessment_timestamp'] = ts.isoformat()
-    return d
+    def _scores_to_dict(self, scores):
+        """Convert ScoringResults object to a JSON-safe dict"""
+        d = scores.__dict__.copy()
+        ts = d.get('assessment_timestamp')
+        if isinstance(ts, datetime):
+            d['assessment_timestamp'] = ts.isoformat()
+        return d
 
-def export_for_analysis(self) -> Dict[str, Any]:
-    """Export session data for statistical analysis"""
-    # Ensure analytics are calculated
-    if self.analytics is None:
-        self.calculate_analytics()
-    
-    return {
-        'session_metadata': {
-            'session_id': self.session_id,
-            'condition_code': self.condition_code,
-            'user_expertise': self.user_expertise.value,
-            'ai_assistance_enabled': self.ai_assistance_enabled,
-            'bias_type': self.bias_type.value,
-            'domain': self.domain.value,
-            'scenario_id': self.assigned_scenario.scenario_id,
-            'session_start_time': self.session_start_time.isoformat(),
-            'completion_time': self.completion_time.isoformat() if self.completion_time else None,
-            'session_duration_minutes': self.session_duration_minutes,
-            'is_completed': self.is_completed,
-            'completion_percentage': self.completion_percentage
-        },
-        'response_data': [
-            {
-                'stage_number': r.stage_number,
-                'stage_name': r.stage_name,
-                'response_text': r.response_text,
-                'word_count': r.word_count,
-                'character_count': r.character_count,
-                'response_time_seconds': r.response_time_seconds,
-                'guidance_requested': r.guidance_requested,
-                'scores': self._scores_to_dict(r.scores) if r.scores else None
+    def export_for_analysis(self) -> Dict[str, Any]:
+        """Export session data for statistical analysis"""
+        # Ensure analytics are calculated
+        if self.analytics is None:
+            self.calculate_analytics()
+        
+        return {
+            'session_metadata': {
+                'session_id': self.session_id,
+                'condition_code': self.condition_code,
+                'user_expertise': self.user_expertise.value,
+                'ai_assistance_enabled': self.ai_assistance_enabled,
+                'bias_type': self.bias_type.value,
+                'domain': self.domain.value,
+                'scenario_id': self.assigned_scenario.scenario_id,
+                'session_start_time': self.session_start_time.isoformat(),
+                'completion_time': self.completion_time.isoformat() if self.completion_time else None,
+                'session_duration_minutes': self.session_duration_minutes,
+                'is_completed': self.is_completed,
+                'completion_percentage': self.completion_percentage
+            },
+            'response_data': [
+                {
+                    'stage_number': r.stage_number,
+                    'stage_name': r.stage_name,
+                    'response_text': r.response_text,
+                    'word_count': r.word_count,
+                    'character_count': r.character_count,
+                    'response_time_seconds': r.response_time_seconds,
+                    'guidance_requested': r.guidance_requested,
+                    'scores': self._scores_to_dict(r.scores) if r.scores else None
+                }
+                for r in self.stage_responses
+            ],
+            'session_analytics': self.analytics.__dict__ if self.analytics else None,
+            'quality_flags': self.quality_flags,
+            'experimental_metadata': {
+                'protocol_version': self.experimental_protocol_version,
+                'data_collection_method': self.data_collection_method,
+                'bias_revelation_timing': self.bias_revelation_timing
             }
-            for r in self.stage_responses
-        ],
-        'session_analytics': self.analytics.__dict__ if self.analytics else None,
-        'quality_flags': self.quality_flags,
-        'experimental_metadata': {
-            'protocol_version': self.experimental_protocol_version,
-            'data_collection_method': self.data_collection_method,
-            'bias_revelation_timing': self.bias_revelation_timing
         }
-    }
 
 # =============================================================================
 # UTILITY FUNCTIONS FOR DATA MANAGEMENT

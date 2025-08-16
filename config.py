@@ -29,7 +29,11 @@ LLM_ENABLED = os.getenv("LLM_ENABLED", "True").lower() == "true"
 MAX_RESPONSES_PER_SESSION = int(os.getenv("MAX_RESPONSES_PER_SESSION", "10"))
 
 # Default local model for Ollama
-OLLAMA_CONFIG = {"model": "llama3.2:instruct", "temperature": 0.7, "max_tokens": 200}
+OLLAMA_CONFIG = {
+    "model": "llama3.2", 
+    "temperature": 0.7,
+    "max_tokens": 512
+}
 
 STATISTICAL_SIGNIFICANCE_THRESHOLD = 0.05
 MIMICRY_THRESHOLD_SD_MULTIPLIER = 0.5

@@ -12,11 +12,11 @@ import json
 import uuid
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, Union
 import os
 
 import config
-from src.models import UserExpertise, ExperimentalSession
+from src.models import UserExpertise, ExperimentalSession, Domain
 
 from enum import Enum as _Enum
 
@@ -100,6 +100,8 @@ class SessionManager:
         # Core experimental variables with null safety
         if 'user_expertise' not in st.session_state:
             st.session_state.user_expertise = None
+        if 'selected_domain' not in st.session_state:
+            st.session_state.selected_domain = None
         if 'ai_assistance_enabled' not in st.session_state:
             st.session_state.ai_assistance_enabled = None
 
@@ -168,6 +170,32 @@ class SessionManager:
             return True
         return False
 
+    def set_selected_domain(self, domain: Optional[str]) -> bool:
+        """
+        Set (or clear) the selected domain for scenario filtering.
+
+        Pass None (or an empty string) to clear the lock so scenarios can come from any domain.
+        """
+        normalised = None if domain in (None, "", "All domains") else str(domain)
+        if domain in (None, "", "All domains"):
+            normalized_enum = None
+        elif isinstance(domain, Domain):
+            normalized_enum = domain
+        else:
+            try:
+                normalized_enum = Domain(str(domain))
+            except Exception:
+                normalized_enum = None
+
+        if safe_set_session_value('selected_domain', normalized_enum):
+            self.auto_save_session_data('domain_selection', {
+                'domain': getattr(normalized_enum, 'value', None),
+                'timestamp': datetime.now().isoformat()
+            })
+            logger.info(f"Domain set to: {getattr(normalized_enum, 'value', None)}")
+            return True
+        return False
+
     def set_experimental_session(self, session: ExperimentalSession) -> bool:
         """
         Set experimental session with validation.
@@ -184,6 +212,10 @@ class SessionManager:
                 'experimental_condition': session.condition_code,
                 'bias_type': session.bias_type.value,
                 'domain': session.domain.value,
+                'selected_domain': (
+                    getattr(safe_get_session_value('selected_domain'), 'value', safe_get_session_value('selected_domain'))
+                    if safe_get_session_value('selected_domain') is not None else None
+                ),
                 'session_start': datetime.now().isoformat()
             })
 
@@ -244,6 +276,7 @@ class SessionManager:
             safe_set_session_value('current_stage', 0)
             safe_set_session_value('user_expertise', None)
             safe_set_session_value('ai_assistance_enabled', None)
+            safe_set_session_value('selected_domain', None) 
             safe_set_session_value('recovery_checked', False)
             safe_set_session_value('session_start_time', datetime.now())
 
@@ -301,9 +334,8 @@ class SessionManager:
         expertise = safe_get_session_value('user_expertise')
         assistance = safe_get_session_value('ai_assistance_enabled')
 
-        expertise_str = expertise.value if expertise else 'unknown'
+        expertise_str = getattr(expertise, 'value', expertise) if expertise is not None else 'unknown'
         assistance_str = str(assistance) if assistance is not None else 'unknown'
-
         return f"{expertise_str}_{assistance_str}_unknown"
 
     def validate_session_state(self) -> Dict[str, bool]:
@@ -373,8 +405,15 @@ class SessionManager:
                 'session_id': session_id,
 
                 # Core experimental variables
-                'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+                'user_expertise': (
+                    getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                    if safe_get_session_value('user_expertise') is not None else None
+                ),
                 'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
+                'selected_domain': (
+                    getattr(safe_get_session_value('selected_domain'), 'value', safe_get_session_value('selected_domain'))
+                    if safe_get_session_value('selected_domain') is not None else None
+                ),
                 'experimental_condition': self.get_experimental_condition(),
 
                 # Progress tracking
@@ -439,7 +478,10 @@ class SessionRecovery:
                 'recovery_version': '2.0',
 
                 # Core experimental state
-                'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+                'user_expertise': (
+                    getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                    if safe_get_session_value('user_expertise') is not None else None
+                ),
                 'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
                 'current_stage': safe_get_session_value('current_stage', 0),
                 'interaction_flow': safe_get_session_value('interaction_flow'),
@@ -465,7 +507,7 @@ class SessionRecovery:
 
             recovery_file = f"{recovery_dir}/{session_id}_recovery.json"
             with open(recovery_file, 'w') as f:
-                json.dump(enum_to_str(enum_to_str(recovery_data)), f, indent=2)
+                json.dump(enum_to_str(recovery_data), f, indent=2)
 
             logger.info(f"Recovery checkpoint saved: {recovery_file}")
 
@@ -527,7 +569,10 @@ def get_session_summary() -> Dict[str, Any]:
             'session_duration_minutes': (datetime.now() - safe_get_session_value('session_start_time', datetime.now())).total_seconds() / 60
         },
         'experimental_condition': {
-            'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+            'user_expertise': (
+                getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                if safe_get_session_value('user_expertise') is not None else None
+            ),
             'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
             'bias_type': experimental_session.bias_type.value if experimental_session else None,
             'domain': experimental_session.domain.value if experimental_session else None

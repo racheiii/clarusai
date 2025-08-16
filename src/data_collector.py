@@ -236,8 +236,11 @@ class DataCollector:
             'timestamp': datetime.now().isoformat(),
             'session_id': experimental_session.session_id if experimental_session else 'unknown',
             
-            # Core research variables
-            'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+            # Core research variables            
+            'user_expertise': (
+                getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                if safe_get_session_value('user_expertise') is not None else None
+            ),
             'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
             'scenario_id': scenario.get('scenario_id', 'unknown'),
             'bias_type': scenario.get('bias_type', 'unknown'),
@@ -434,7 +437,10 @@ class DataCollector:
                 'recovery_version': '2.0',
                 
                 # Core experimental state
-                'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+                'user_expertise': (
+                    getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                    if safe_get_session_value('user_expertise') is not None else None
+                ),
                 'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
                 'current_stage': safe_get_session_value('current_stage', 0),
                 'interaction_flow': safe_get_session_value('interaction_flow'),
@@ -479,7 +485,10 @@ class DataCollector:
                 'session_id': session_id,
                 
                 # Core experimental variables
-                'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+                'user_expertise': (
+                    getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                    if safe_get_session_value('user_expertise') is not None else None
+                ),
                 'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
                 'experimental_condition': self._get_experimental_condition(),
                 
@@ -529,7 +538,7 @@ class DataCollector:
         expertise = safe_get_session_value('user_expertise')
         assistance = safe_get_session_value('ai_assistance_enabled')
         
-        expertise_str = expertise.value if expertise else 'unknown'
+        expertise_str = getattr(expertise, 'value', expertise) if expertise is not None else 'unknown'
         assistance_str = str(assistance) if assistance is not None else 'unknown'
         
         return f"{expertise_str}_{assistance_str}_unknown"

@@ -110,7 +110,8 @@ def render_academic_footer() -> None:
     st.markdown("""
     <div class="academic-footer-content">
         <h4>UCL Master's Dissertation Research</h4>
-        <p>Building AI Literacy Through Simulation: Evaluating LLM-Assisted Cognitive Bias Training</p>
+        <p><strong>Building AI Literacy Through Simulation</strong></p>
+        <p><em>Beyond Surface Learning: Evaluating AI Literacy Through LLM-Supported Cognitive Bias Simulation</em></p>
         <p>Cognitive Bias Recognition • Professional Training • AI Assistance Research</p>
     </div>
     """, unsafe_allow_html=True)
@@ -290,7 +291,7 @@ def render_research_access_section() -> None:
     <div class="home-research-access">
         <h3>🔬 Dashboard Access</h3>
         <p>
-        Access automated testing, statistical analysis, and methodology validation tools
+        Access dataset generator, automated testing, statistical analysis, and methodology validation tools
         </p>
     </div>
     """, unsafe_allow_html=True)

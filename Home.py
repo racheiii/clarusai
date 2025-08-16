@@ -82,7 +82,7 @@ def main():
         if st.button(
             "📊 Access Research Dashboard", 
             use_container_width=True, 
-            help="Research automation and analysis tools"
+            help="Dataset generator, research automation and analysis tools"
         ):
             st.session_state.current_page = "dashboard"
             st.switch_page("pages/02_Dashboard.py")

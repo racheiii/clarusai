@@ -32,7 +32,7 @@ def generate_ollama_response(
 
     # Default to model from config if not explicitly provided
     if not model:
-        model = OLLAMA_CONFIG.get("model", "llama3.2:instruct")
+        model = OLLAMA_CONFIG.get("model", "llama3.2")
 
     # Early exit if Ollama is unavailable
     if not check_ollama_availability():

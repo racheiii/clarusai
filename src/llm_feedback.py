@@ -52,7 +52,7 @@ def generate_stage_feedback(scenario, stage_index, user_response) -> str:
     try:
         feedback = generate_ollama_response(
             prompt_text,
-            model=str(OLLAMA_CONFIG.get("model") or "llama3.2:instruct")
+            model=str(OLLAMA_CONFIG.get("model") or "llama3.2")
         )
         return feedback if feedback else "⚠️ No feedback returned by model."
     except Exception as e:

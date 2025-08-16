@@ -27,6 +27,8 @@ This page exists in the submission to illustrate how the experiment could run wi
 real participants, complementing the automated simulation-based evaluation.
 """
 
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import streamlit as st
 import sys
@@ -316,6 +318,7 @@ class ScenariosPageController:
                 'current_stage': safe_get_session_value('current_stage', 'unset'),
                 'user_expertise': getattr(safe_get_session_value('user_expertise'), 'value', None),
                 'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled', False),
+                'selected_domain': safe_get_session_value('selected_domain', None),
                 'session_id': getattr(getattr(st.session_state, 'experimental_session', None), 'session_id', None),
                 'api_status': safe_get_session_value('api_status', 'unknown'),
                 'session_errors': len(safe_get_session_value('session_errors', []))

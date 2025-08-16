@@ -99,6 +99,45 @@ def validate_experimental_completeness(items: List[Dict[str, Any]]) -> bool:
     print(f"✅ All {expected} experimental conditions present")
     return True
 
+# ===== Persona primers =====
+PERSONA_PRIMERS = {
+    "novice": """
+You are a novice professional (≈2–3 years) operating in a high-stakes context.
+
+Behavioural targets:
+- Analytical depth (~6/10): Identify 2–3 key factors; avoid long causal chains.
+- Terminology specificity (5/10): Prefer broadly understood terms; minimal jargon.
+- Argument structure (5/10): Short bullets/paragraphs; may anchor on first idea.
+- Bias susceptibility (7/10): Prone to anchoring/availability/confirmation; may accept suggestions verbatim.
+- AI reliance (8/10): Consult AI early; limited challenge to its output.
+- Ambiguity tolerance (6/10): Discomfort with uncertainty; prefers clear next steps.
+- Metacognitive markers (6/10): Include one brief bias self-check (e.g., “I may be anchoring because …”).
+
+Style rules:
+- Keep answers concise (bullets or short paragraphs).
+- Include exactly ONE explicit “bias check” sentence.
+- Calibrate confidence with hedges (“likely”, “uncertain”, “provisionally”).
+""".strip(),
+
+    "expert": """
+You are a senior professional (15+ years) operating in a high-stakes context.
+
+Behavioural targets:
+- Analytical depth (~9/10): Compare competing hypotheses; weigh trade-offs/risks.
+- Terminology specificity (9/10): Use precise terms when useful; briefly define uncommon ones.
+- Argument structure (9/10): Numbered reasoning → inference → decision.
+- Bias susceptibility (4/10): Actively counter anchoring/availability/confirmation; challenge weak suggestions.
+- AI reliance (5/10): Use AI selectively for cross-check; preserve original reasoning.
+- Ambiguity tolerance (8/10): State residual uncertainty and contingency plans.
+- Metacognitive markers (8/10): Include a calibration line and one explicit counter-bias move.
+
+Style rules:
+- Structure as “Assessment: … / Reasoning: … / Plan: …” (adapt labels if needed).
+- Include exactly ONE counter-bias step (e.g., alternative interpretation).
+- Provide a justified confidence statement (“moderate confidence because …”).
+""".strip(),
+}
+
 # ================================
 # GENERATOR
 # ================================
@@ -116,7 +155,7 @@ class SimulatedUserGenerator:
         scenarios_csv_path: str = "data/scenarios.csv",
         replicates_per_condition: int = DEFAULT_REPLICATES_PER_CONDITION,
         seed: int | None = None,
-        model_name: str = "llama3.2:instruct",
+        model_name: str = "llama3.2",
         target_words: int | None = None,
     ) -> None:
         self.scenarios_csv_path = scenarios_csv_path
@@ -206,6 +245,49 @@ class SimulatedUserGenerator:
             random_state=int(self._rng.integers(0, 2**31 - 1))
         ).iloc[0]
 
+    def _build_persona_prompt(
+        self,
+        expertise_key: str,
+        domain: str,
+        scenario_text: str,
+        stage_name: str,
+        stage_prompt: str,
+        ai_assistance: bool,
+        length_hint: str = ""
+    ) -> str:
+        """Compose a domain-agnostic persona prompt with behavioural constraints."""
+        persona_block = PERSONA_PRIMERS[expertise_key]
+
+        domain_adapter = (
+            f"Domain context: {domain}.\n"
+            "- Use domain-appropriate language sparingly; define uncommon terms briefly.\n"
+            "- Do not invent facts outside the scenario; if information is missing, state the assumption.\n"
+        )
+
+        ai_note = (
+            "AI assistance is AVAILABLE. You may consult it, but: state explicitly when you relied on it; "
+            "challenge any suggestion that conflicts with your reasoning; and justify acceptance or rejection."
+            if ai_assistance else
+            "No AI assistance is available; rely solely on your own reasoning."
+        )
+
+        output_rules = (
+            "Output requirements:\n"
+            "- Follow the persona constraints above (they encode behaviour, not domain knowledge).\n"
+            "- Include exactly one bias/self-check sentence (novice) or one explicit counter-bias step (expert).\n"
+            "- Be concise and structured; do not restate these instructions.\n"
+        )
+
+        return (
+            f"{persona_block}\n\n"
+            f"{domain_adapter}\n"
+            f"Scenario:\n{scenario_text}\n\n"
+            f"Task ({stage_name}):\n{stage_prompt}\n\n"
+            f"{ai_note}\n\n"
+            f"{output_rules}"
+            f"{length_hint}"
+        )
+        
     # ----- Response generation -----
     def generate_llama3_response(
         self,
@@ -230,29 +312,28 @@ class SimulatedUserGenerator:
         scenario_text = scenario.get("scenario_text", "")
         stage_prompt = scenario.get(prompt_field, "")
 
-        expertise_str = "novice" if expertise == UserExpertise.NOVICE else "expert"
-        ai_note = (
-            "You have access to AI guidance if needed."
-            if ai_assistance
-            else "You are working without any AI assistance."
-        )
+        expertise_key = "novice" if expertise == UserExpertise.NOVICE else "expert"
 
         length_hint = ""
         if self.target_words:
             length_hint = f"\n\nAim for approximately {self.target_words} words (±20%)."
 
-        full_prompt = (
-            f"You are a {expertise_str} professional operating in the {domain} domain.\n\n"
-            f"Scenario:\n{scenario_text}\n\n"
-            f"Task ({stage_name}):\n{stage_prompt}\n\n"
-            f"{ai_note}\n"
-            "Please respond in your own words; avoid copying the prompt."
-            f"{length_hint}"
+        full_prompt = self._build_persona_prompt(
+            expertise_key=expertise_key,
+            domain=str(domain),
+            scenario_text=scenario_text,
+            stage_name=stage_name,
+            stage_prompt=stage_prompt,
+            ai_assistance=ai_assistance,
+            length_hint=length_hint
         )
+
+        # Stage 4 transfer requirement (index 3)
         if stage == 3:
             full_prompt += (
-                "\n\nSpecifically consider how these principles could apply to other "
-                "professional domains and decision-making contexts."
+                "\n\nTransfer requirement:\n"
+                "- Generalise the core reasoning and bias-mitigation principles to at least ONE other high-stakes domain "
+                "using neutral language and minimal jargon."
             )
 
         try:
@@ -517,7 +598,7 @@ def main() -> None:
     gen = SimulatedUserGenerator()
 
     def progress(cur: int, total: int, sid: str) -> None:
-        print(f"Progress: {cur}/{total} ({(cur/max(total,1))*100:.1f}%) - {sid}")
+        print(f"Progress: {cur}/{total} ({(cur/total)*100:.1f}%) - {sid}")
 
     res = gen.generate_full_dataset(progress_callback=progress)  # auto dataset_#
     if res.get("success"):

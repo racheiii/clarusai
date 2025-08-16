@@ -10,6 +10,7 @@ import streamlit as st
 from src.session_manager import safe_get_session_value, safe_set_session_value
 from src.llm_utils import generate_ollama_response
 from config import OLLAMA_CONFIG
+from src import llm_feedback
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -199,5 +200,5 @@ class AIGuidance:
 
         return generate_ollama_response(
             prompt,
-            model=str(OLLAMA_CONFIG.get("model") or "llama3.2:instruct")
+            model=str(OLLAMA_CONFIG.get("model") or "llama3.2")
         ) or ""

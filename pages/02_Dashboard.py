@@ -357,7 +357,10 @@ def summarize_factorial(df: pd.DataFrame) -> Dict[str, Any]:
                                             ordered=True)
 
         agg = (
-            d.groupby(["user_expertise", "ai_assistance_enabled", "bias_type"]).agg(
+            d.groupby(
+                ["user_expertise", "ai_assistance_enabled", "bias_type"],
+                observed=False
+            ).agg(
                 overall_quality_score=("overall_quality_score", "mean"),
                 semantic_similarity=("semantic_similarity", "mean"),
                 originality_score=("originality_score", "mean"),
@@ -742,17 +745,19 @@ def tab_dataset_generation() -> None:
             st.write("• AI Assistance: Enabled, Disabled")
             st.write("• Bias Type: Confirmation, Anchoring, Availability")
 
+            replicates_live = st.slider("Replicates per condition", 1, 10, 3, key="replicates_live")
+            sessions = 12 * int(replicates_live)   # 2 expertise × 2 AI × 3 biases = 12 per replicate
+            responses = sessions * 4               # 4 stages each
+            st.caption(f"Planned size: {sessions} sessions • {responses} responses (4 stages).")
+
             with st.form("gen_controls", clear_on_submit=False):
-                replicates = st.slider("Replicates per condition", 1, 10, 3)
+                # Mirror the live value (read-only) so users see what will be submitted
+                st.slider("Replicates per condition (submitted)", 1, 10, replicates_live, disabled=True)
 
-                # Live size preview: 2 expertise × 2 AI × 3 biases = 12 sessions per replicate; 4 stages each
-                sessions = 12 * int(replicates)
-                responses = sessions * 4
-                st.caption(f"Planned size: {sessions} sessions • {responses} responses (4 stages).")
-
-                use_seed = st.checkbox("Use random seed", value=True)
+                # Checked = deterministic run; Unchecked = fresh RNG each run
+                use_fixed_seed = st.checkbox("Use fixed seed (reproducible)", value=True)
                 seed_val = st.number_input("Seed", min_value=0, max_value=2_147_483_647, value=42, step=1)
-                model_name = st.text_input("Model (Ollama id)", value="llama3.2:instruct")
+                model_name = st.text_input("Model (Ollama id)", value="llama3.2")
                 target_words = st.slider("Target response length (words)", 60, 400, 180, 10)
 
                 submitted = st.form_submit_button("🚀 Generate Simulated Dataset", type="primary")
@@ -768,7 +773,7 @@ def tab_dataset_generation() -> None:
 
                 try:
                     with st.spinner("Initializing simulation generator..."):
-                        # Resolve a usable scenarios.csv location
+                        # Resolve a usable scenarios.csv location (unchanged)
                         candidate_paths = [
                             "/mnt/data/scenarios.csv",  # Chat upload path
                             str(DATA_DIR / "scenarios.csv"),  # project data folder (config-driven)
@@ -788,8 +793,8 @@ def tab_dataset_generation() -> None:
 
                         gen = SimulatedUserGenerator(
                             scenarios_csv_path=scenarios_path,
-                            replicates_per_condition=int(replicates),
-                            seed=int(seed_val) if use_seed else None,
+                            replicates_per_condition=int(st.session_state["replicates_live"]),
+                            seed=int(seed_val) if use_fixed_seed else None,
                             model_name=model_name.strip(),
                             target_words=int(target_words),
                         )
