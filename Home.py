@@ -1,10 +1,11 @@
 """
-ClārusAI: Enhanced Main Landing Page
+Main Landing Page
 """
 
 import streamlit as st
 import sys
 from pathlib import Path
+from src.session_manager import SessionManager
 
 # Add src directory to Python path for imports
 src_path = Path(__file__).parent / "src"
@@ -63,12 +64,15 @@ def main():
             "🚀 Start Training", 
             type="primary", 
             use_container_width=True, 
-            help="Begin interactive bias recognition training"
+            help="Begin interactive bias recognition training (demo mode — not used for dataset generation)"
         ):
-            from src.session_manager import SessionManager
             SessionManager().reset_experimental_session()
             st.session_state.current_page = "scenarios"
-            st.switch_page("pages/01_Scenarios.py")
+            try:
+                st.switch_page("pages/01_Scenarios.py")
+            except AttributeError:
+                st.session_state['interaction_flow'] = 'setup'
+                st.rerun()
 
     # Research access section
     render_research_access_section()
@@ -78,7 +82,7 @@ def main():
         if st.button(
             "📊 Access Research Dashboard", 
             use_container_width=True, 
-            help="Research automation and analysis tools"
+            help="Dataset generator, research automation and analysis tools"
         ):
             st.session_state.current_page = "dashboard"
             st.switch_page("pages/02_Dashboard.py")

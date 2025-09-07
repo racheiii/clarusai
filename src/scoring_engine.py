@@ -1,52 +1,128 @@
-
 """ 
-ClārusAI: 6-Dimensional Cognitive Bias Assessment Engine
+6-Dimensional Cognitive Bias Assessment Engine
 
-scoring_engine.py - Complete assessment system for authentic AI literacy measurement
+Measures:
+  1) Semantic similarity (MiniLM cosine)
+  2) Bias recognition (keywords/semantic cues)
+  3) Conceptual originality (TF‑IDF char n‑grams)
+  4) Mitigation strategy (domain terms)
+  5) Domain transferability (cross‑domain terms)
+  6) Metacognitive awareness (self‑reflection markers)
 
-Academic Purpose:
-This module implements the core 6-dimensional scoring framework for evaluating
-authentic AI literacy vs algorithmic dependency patterns in cognitive bias training.
-Each dimension captures specific aspects of learning internalization and critical thinking.
-
-Research Framework:
-- Semantic Similarity: Detects AI parroting vs independent analysis
-- Bias Recognition: Measures learning of cognitive bias concepts  
-- Conceptual Originality: Assesses independent reasoning vs mimicry
-- Mitigation Strategy: Evaluates strategic thinking sophistication
-- Domain Transferability: Tests cross-context application ability
-- Metacognitive Awareness: Captures self-reflective reasoning patterns
-
-Statistical Integration:
-All functions return both quantitative scores and qualitative tags for
-comprehensive statistical analysis and real-time educational feedback.
+Config‑driven thresholds and weights; returns a structured dict for the dashboard.
 """
 
-from typing import Tuple, Dict, Any, List, cast
+from __future__ import annotations
+
+# Standard library
 from enum import Enum
+from typing import Any, Dict, List, Sequence, Tuple, cast
+
+# Third-party
 import numpy as np
+from scipy.sparse import csr_matrix
+from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
-import nltk
-import config
-from scipy.sparse import csr_matrix
 
-# Load transformer model once
+# Local
+import config
+
+import re
+
+BIAS_MARKERS = [
+    r"\bBias check:\b", r"\bCounter-bias:\b",
+    r"\banchoring\b", r"\bavailability\b", r"\bconfirmation\b"
+]
+CONFIDENCE_MARKERS = [r"^Confidence:\s*", r"\bconfidence\b"]
+TRANSFER_MARKERS = [r"^Transfer:\s*", r"\bapply (?:this|these) (?:principle|principles)\b", r"\bin other domains\b"]
+
+def _count_regex_any(text: str, patterns: list[str]) -> int:
+    t = text.lower()
+    return sum(1 for p in patterns if re.search(p, t, flags=re.MULTILINE))
+
+def detect_bias_recognition(response: str, bias_type: Any) -> Tuple[int, str]:
+    """
+    Unified detector that combines:
+      (a) explicit line markers: 'Bias check:' / 'Counter-bias:'  (strong signal)
+      (b) config-driven keywords and semantic cues for the scenario's bias_type
+    Returns: (count, tag) where tag ∈ {'strong','partial','none','invalid'}
+    """
+    if not validate_response(response):
+        return 0, "invalid"
+
+    resp_lc = response.lower()
+
+    if _count_regex_any(resp_lc, [r"\bBias check:\b", r"\bCounter-bias:\b"]) > 0:
+        return 2, "strong"  
+
+    bias_raw = safe_enum_str(bias_type)
+    try:
+        keywords = config.get_bias_keywords(bias_raw)
+    except Exception:
+        keywords = []
+    cue_key = bias_raw.lower().replace("_bias", "").replace("_heuristic", "")
+    semantic_patterns = getattr(config, "SEMANTIC_BIAS_CUES", {}).get(cue_key, [])
+
+    hits = set()
+    for kw in keywords:
+        if kw and kw.lower() in resp_lc:
+            hits.add(kw.lower())
+    for phrase in semantic_patterns:
+        p = phrase.lower()
+        if p and p in resp_lc:
+            hits.add(p)
+
+    total_hits = len(hits)
+    threshold = getattr(config, "SCORING_THRESHOLDS", {}).get("bias_recognition_min_terms", 1)
+
+    if total_hits >= threshold:
+        tag = "strong"
+    elif total_hits == 1:
+        tag = "partial"
+    else:
+        tag = "none"
+
+    return total_hits, tag
+
+def validate_response(response: str, min_length: int = 10) -> bool:
+    """Basic sanity check for non-empty, minimally-long responses."""
+    return isinstance(response, str) and len(response.strip()) >= min_length
+
+def safe_enum_str(value: Any) -> str:
+    """Return Enum.value if Enum, else str(value)."""
+    return value.value if isinstance(value, Enum) else str(value)
+
+def _collect_transfer_terms_from_config(domain_key: str) -> List[str]:
+    """
+    Collect domain-specific and general transfer vocabulary from `config`
+    without direct attribute access (static-checker friendly).
+    Returns a flat, deduplicated list of lowercase terms.
+    """
+    per_domain = cast(Dict[str, List[str]], getattr(config, "TRANSFER_TERMS", {}))
+    general = cast(Sequence[str], getattr(config, "GENERAL_TRANSFER_TERMS", ()))
+    verbs = cast(Sequence[str], getattr(config, "TRANSFER_VERBS", ()))
+
+    ordered: List[str] = []
+    ordered.extend(t.lower() for t in per_domain.get(domain_key, []))
+    ordered.extend(t.lower() for t in general)
+    ordered.extend(t.lower() for t in verbs)
+
+    seen: set[str] = set()
+    unique: List[str] = []
+    for t in ordered:
+        if t and t not in seen:
+            seen.add(t)
+            unique.append(t)
+    return unique
+
 try:
-    nltk.download("punkt", quiet=True)
     model = SentenceTransformer("all-MiniLM-L6-v2")
     MODEL_LOADED = True
 except Exception as e:
     print(f"Model failed to load: {e}")
     model = None
     MODEL_LOADED = False
-
-def validate_response(response: str, min_length: int = 10) -> bool:
-    return isinstance(response, str) and len(response.strip()) >= min_length
-
-def safe_enum_str(value):
-    return value.value if isinstance(value, Enum) else str(value)
 
 def calculate_semantic_similarity(response: str, ideal_answer: str) -> Tuple[float, str]:
     if not validate_response(response) or not validate_response(ideal_answer):
@@ -58,7 +134,6 @@ def calculate_semantic_similarity(response: str, ideal_answer: str) -> Tuple[flo
 
     try:
         embeddings = model.encode([response, ideal_answer])
-        # Fix: convert to np.array to satisfy MatrixLike type requirement
         similarity = cosine_similarity(np.array([embeddings[0]]), np.array([embeddings[1]]))[0][0]
     except Exception as e:
         print(f"Semantic similarity error: {e}")
@@ -76,67 +151,32 @@ def calculate_semantic_similarity(response: str, ideal_answer: str) -> Tuple[flo
 
     return similarity, tag
 
-
-
-def detect_bias_recognition(response: str, bias_type: Any) -> Tuple[int, str]:
-    if not validate_response(response):
-        return 0, "invalid"
-
-    response_lc = response.lower()
-    bias_key = safe_enum_str(bias_type).lower()
-
-    # Explicit keyword check (from config)
-    keywords = config.BIAS_KEYWORDS.get(bias_key, [])
-    keyword_hits = [kw for kw in keywords if kw in response_lc]
-
-    # Semantic cue check (soft implicit detection)
-    semantic_patterns = config.SEMANTIC_BIAS_CUES.get(bias_key, [])
-    phrase_hits = [phrase for phrase in semantic_patterns if phrase in response_lc]
-
-    total_hits = len(set(keyword_hits + phrase_hits))
-
-    threshold = config.SCORING_THRESHOLDS.get("bias_recognition_min_terms", 2)
-
-    if total_hits >= threshold:
-        tag = "strong"
-    elif total_hits == 1:
-        tag = "partial"
-    else:
-        tag = "none"
-
-    return total_hits, tag
-
 def measure_originality(response: str, ideal_answer: str) -> Tuple[float, str]:
+    """
+    Originality = 1 - cosine(tfidf_char_ngrams).
+    Uses character n-grams at word boundaries
+    """
     if not validate_response(response) or not validate_response(ideal_answer):
         return 0.0, "invalid"
 
     try:
         tfidf = TfidfVectorizer(
-            stop_words="english",
-            max_features=1000,
-            ngram_range=(1, 2),
-            token_pattern=r'\b[A-Za-z]{2,}\b'
+            analyzer="char_wb",
+            ngram_range=(3, 5),
+            min_df=1,
+            max_features=20000,
         )
-        tfidf_matrix = tfidf.fit_transform([response, ideal_answer])
-        csr = cast(csr_matrix, tfidf_matrix)
-        dense = csr.toarray()
-        # Fix: convert to np.array to satisfy MatrixLike requirement
-        similarity = cosine_similarity(np.array([dense[0]]), np.array([dense[1]]))[0][0]
-        originality = 1.0 - similarity
+        sparse = tfidf.fit_transform([response, ideal_answer])
+        csr_mat = cast(csr_matrix, sparse)
+        sim = float(cosine_similarity(csr_mat.getrow(0), csr_mat.getrow(1))[0, 0])
+        originality = float(max(0.0, min(1.0, 1.0 - sim)))
     except Exception as e:
         print(f"Originality error: {e}")
         originality = 0.0
 
     low = config.SCORING_THRESHOLDS.get("originality_low", 0.25)
     high = config.SCORING_THRESHOLDS.get("originality_high", 0.5)
-
-    if originality < low:
-        tag = "low"
-    elif originality < high:
-        tag = "moderate"
-    else:
-        tag = "high"
-
+    tag = "low" if originality < low else ("moderate" if originality < high else "high")
     return originality, tag
 
 def assess_mitigation_strategy(response: str) -> Tuple[int, str]:
@@ -157,16 +197,24 @@ def assess_mitigation_strategy(response: str) -> Tuple[int, str]:
     return count, tag
 
 def evaluate_transferability(response: str, original_domain: Any) -> Tuple[int, str]:
+    """
+    Detect transfer intent by counting soft substring matches against a
+    domain-aware vocabulary (verbs + cross-domain phrases)
+    """
     if not validate_response(response):
         return 0, "invalid"
 
-    domain = safe_enum_str(original_domain).lower()
-    terms = config.TRANSFER_TERMS.get(domain, []) + config.GENERAL_TRANSFER_TERMS
-    found = [term for term in terms if term in response.lower()]
-    count = len(found)
+    text = response.lower().strip()
+    domain_key = safe_enum_str(original_domain).lower()  
 
-    if count >= 2:
+    terms = _collect_transfer_terms_from_config(domain_key)
+    hits = [t for t in terms if t and t in text]
+    count = len(set(hits))
+
+    if count >= 3:
         tag = "strong transfer"
+    elif count == 2:
+        tag = "clear transfer"
     elif count == 1:
         tag = "limited transfer"
     else:
@@ -190,6 +238,19 @@ def measure_metacognition(response: str) -> Tuple[int, str]:
         tag = "no awareness"
 
     return count, tag
+
+def map_bias_count_to_level(count: int) -> str:
+    """
+    Convert a per-stage bias_recognition count (0..N) into unified bands.
+    Counts of 0 = Foundational; 1 = Competent; 2 = Proficient; ≥3 = Advanced.
+    """
+    if count >= 3:
+        return "Advanced"
+    if count == 2:
+        return "Proficient"
+    if count == 1:
+        return "Competent"
+    return "Foundational"
 
 def calculate_comprehensive_scores(response: str, ideal_answer: str, scenario: Dict[str, Any]) -> Dict[str, Any]:
     bias_type = scenario.get("bias_type", "unknown")
@@ -219,6 +280,7 @@ def calculate_comprehensive_scores(response: str, ideal_answer: str, scenario: D
         "domain_transferability": {"count": transfer_count, "tag": transfer_tag},
         "metacognitive_awareness": {"count": metacog_count, "tag": metacog_tag},
         "overall_quality_score": overall,
+        "bias_awareness_level": map_bias_count_to_level(bias_count),
         "confidence_flags": {
             "low_effort": len(response.split()) < 10,
             "high_similarity_risk": semantic_score > 0.75 and originality_score < 0.25

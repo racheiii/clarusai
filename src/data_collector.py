@@ -5,6 +5,8 @@ src/data_collector.py - Data collection with 6-dimensional scoring
 
 Purpose:
 Handles all data collection, scoring, and persistence operations
+Note: This module is not used in the simulated dataset generation or RQ analysis pipeline. 
+Certain fields (e.g., llm_feedback) are retained solely for live demo presentation purposes.
 """
 
 import streamlit as st
@@ -24,7 +26,6 @@ from enum import Enum
 
 def enum_to_str(obj):
     """Recursively convert Enums and NumPy types (incl. bool_) to JSON-safe values."""
-    from enum import Enum
     import numpy as np
     if isinstance(obj, Enum):
         return obj.value
@@ -203,11 +204,30 @@ class DataCollector:
             return scenario_dict.get(STAGE_PROMPTS[stage], '')
         return ''
     
-    def _compile_response_data(self, scenario: Dict[str, Any], stage: int, response: str,
-                              response_time: float, ideal_answer: str, 
-                              scoring_results: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        """Compile comprehensive response metadata."""
-        
+    def _compile_response_data(
+        self,
+        scenario: Dict[str, Any],
+        stage: int,
+        response: str,
+        response_time: float,
+        ideal_answer: str,
+        scoring_results: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Compile comprehensive response metadata for research analysis.
+
+        Args:
+            scenario (Dict[str, Any]): The full scenario metadata dictionary.
+            stage (int): Stage number (0–3).
+            response (str): User's text response.
+            response_time (float): Time taken to respond in seconds.
+            ideal_answer (str): The stage's model ideal answer.
+            scoring_results (Optional[Dict[str, Any]]): Results from scoring engine.
+
+        Returns:
+            Dict[str, Any]: Structured data ready for JSON/JSONL persistence
+        """
+
         # Get experimental condition
         experimental_session = safe_get_session_value('experimental_session')
         condition_code = experimental_session.condition_code if experimental_session else 'unknown'
@@ -216,8 +236,11 @@ class DataCollector:
             'timestamp': datetime.now().isoformat(),
             'session_id': experimental_session.session_id if experimental_session else 'unknown',
             
-            # Core research variables
-            'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+            # Core research variables            
+            'user_expertise': (
+                getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                if safe_get_session_value('user_expertise') is not None else None
+            ),
             'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
             'scenario_id': scenario.get('scenario_id', 'unknown'),
             'bias_type': scenario.get('bias_type', 'unknown'),
@@ -237,7 +260,6 @@ class DataCollector:
             # AI interaction analysis
             'guidance_requested': safe_get_session_value('guidance_usage', [False] * (stage + 1))[stage] if len(safe_get_session_value('guidance_usage', [])) > stage else False,
             'cumulative_guidance_pattern': safe_get_session_value('guidance_usage', [])[:stage+1],
-            'api_status': safe_get_session_value('api_status', 'unknown'),
             
             # 6-dimensional scoring results
             'scoring_results': scoring_results,
@@ -265,7 +287,7 @@ class DataCollector:
         }
     
     def _write_response_files(self, response_data: Dict[str, Any], stage: int) -> bool:
-        """Write response data to files with enhanced error handling."""
+        """Write response data to files with enhanced error handling"""
         
         try:
             # Generate filenames
@@ -312,6 +334,11 @@ class DataCollector:
         """
         Save complete session with enhanced validation.
         
+        Note:
+            This method is used only in live user demonstration mode and does not form part
+            of the simulated dataset generation or RQ analysis pipeline. Certain fields 
+            (e.g., llm_feedback) are retained solely for presentation purposes in the demo.
+
         Returns:
             Optional[str]: Filename if saved successfully
         """
@@ -322,7 +349,7 @@ class DataCollector:
             return None
         
         try:
-            # Export complete session data
+            # Export complete session data from the active live session
             session_data = experimental_session.export_for_analysis()
             
             # Add completion metadata
@@ -330,9 +357,13 @@ class DataCollector:
                 'bias_revealed': True,
                 'bias_revelation_time': datetime.now().isoformat(),
                 'completion_method': 'full_4stage_protocol',
-                'llm_feedback': safe_get_session_value('llm_feedback', [None]*4),
-                'llm_feedback_per_stage': [f.get('llm_feedback') for f in safe_get_session_value('stage_feedback', [None]*4)],
-            'data_quality_assessment': self._validate_session_quality(experimental_session),
+                # Demo-only: LLM tutor feedback for live users; not used in RQ analysis
+                'llm_feedback': safe_get_session_value('llm_feedback', [None] * 4),
+                'llm_feedback_per_stage': [
+                    f.get('llm_feedback') if f else None
+                    for f in safe_get_session_value('stage_feedback', [None] * 4)
+                ],
+                'data_quality_assessment': self._validate_session_quality(experimental_session),
                 'research_version': '2.0'
             })
             
@@ -345,7 +376,7 @@ class DataCollector:
             with open(session_file, 'w') as f:
                 json.dump(enum_to_str(session_data), f, indent=2)
             
-            # Add to master sessions log
+            # Append to master sessions log
             master_sessions = f"{config.RESPONSES_DIR}/master_complete_sessions.jsonl"
             with open(master_sessions, 'a') as f:
                 f.write(json.dumps(enum_to_str(session_data)) + '\n')
@@ -406,7 +437,10 @@ class DataCollector:
                 'recovery_version': '2.0',
                 
                 # Core experimental state
-                'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+                'user_expertise': (
+                    getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                    if safe_get_session_value('user_expertise') is not None else None
+                ),
                 'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
                 'current_stage': safe_get_session_value('current_stage', 0),
                 'interaction_flow': safe_get_session_value('interaction_flow'),
@@ -451,7 +485,10 @@ class DataCollector:
                 'session_id': session_id,
                 
                 # Core experimental variables
-                'user_expertise': safe_get_session_value('user_expertise').value if safe_get_session_value('user_expertise') else None,
+                'user_expertise': (
+                    getattr(safe_get_session_value('user_expertise'), 'value', safe_get_session_value('user_expertise'))
+                    if safe_get_session_value('user_expertise') is not None else None
+                ),
                 'ai_assistance_enabled': safe_get_session_value('ai_assistance_enabled'),
                 'experimental_condition': self._get_experimental_condition(),
                 
@@ -462,7 +499,6 @@ class DataCollector:
                 
                 # Error tracking
                 'session_errors': safe_get_session_value('session_errors', []),
-                'api_status': safe_get_session_value('api_status', 'unknown'),
                 
                 # Event data
                 'event_data': data
@@ -502,7 +538,7 @@ class DataCollector:
         expertise = safe_get_session_value('user_expertise')
         assistance = safe_get_session_value('ai_assistance_enabled')
         
-        expertise_str = expertise.value if expertise else 'unknown'
+        expertise_str = getattr(expertise, 'value', expertise) if expertise is not None else 'unknown'
         assistance_str = str(assistance) if assistance is not None else 'unknown'
         
         return f"{expertise_str}_{assistance_str}_unknown"
@@ -527,8 +563,7 @@ class DataCollector:
             'progress_tracking': {
                 'stages_completed': len(safe_get_session_value('stage_responses', [])),
                 'guidance_requests': sum(safe_get_session_value('guidance_usage', [])),
-                'session_errors': len(safe_get_session_value('session_errors', [])),
-                'api_status': safe_get_session_value('api_status', 'unknown')
+                'session_errors': len(safe_get_session_value('session_errors', []))
             },
             'data_quality': {
                 'has_experimental_session': experimental_session is not None,

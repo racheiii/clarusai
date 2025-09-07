@@ -2,12 +2,14 @@
 .env
 .env.local
 
-# Python
+# Python Cache / Compiled Files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Python Build & Distribution
 build/
 develop-eggs/
 dist/
@@ -29,7 +31,7 @@ venv/
 env/
 ENV/
 
-# IDE
+# IDE / Editor
 .vscode/
 .idea/
 *.swp
@@ -53,11 +55,4 @@ Thumbs.db
 # Research Outputs
 research_outputs/
 statistical_reports/
-raw_datasets/venv/
-__pycache__/
-.DS_Store
-
-.env
-data/responses/
-__pycache__/
-*.pyc
+raw_datasets/

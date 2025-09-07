@@ -15,12 +15,13 @@ Research Framework:
 - SessionAnalytics: Temporal and behavioral analysis data
 """
 
-
-
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 from enum import Enum
+from config import QUALITY_THRESHOLDS
+import logging
+log = logging.getLogger(__name__)
 
 # =============================================================================
 # EXPERIMENTAL DESIGN ENUMERATIONS
@@ -33,9 +34,9 @@ class UserExpertise(Enum):
 
 class BiasType(Enum):
     """Cognitive bias types for factorial design Factor 3"""
-    CONFIRMATION_BIAS = "confirmation_bias"
-    ANCHORING_BIAS = "anchoring_bias" 
-    AVAILABILITY_HEURISTIC = "availability_heuristic"
+    CONFIRMATION_BIAS = "confirmation"
+    ANCHORING_BIAS = "anchoring" 
+    AVAILABILITY_HEURISTIC = "availability"
 
 class Domain(Enum):
     """Professional domains for scenario contexts"""
@@ -68,11 +69,13 @@ CSV_TO_ENUM_MAPPING = {
 }
 
 def map_csv_bias_type(csv_value: str) -> BiasType:
-    """Convert CSV bias type to BiasType enum."""
+    if csv_value not in CSV_TO_ENUM_MAPPING:
+        log.warning(f"Unknown bias_type in CSV: {csv_value!r}; defaulting to Confirmation")
     return CSV_TO_ENUM_MAPPING.get(csv_value, BiasType.CONFIRMATION_BIAS)
 
 def map_csv_domain(csv_value: str) -> Domain:
-    """Convert CSV domain to Domain enum."""
+    if csv_value not in CSV_TO_ENUM_MAPPING:
+        log.warning(f"Unknown domain in CSV: {csv_value!r}; defaulting to Medical")
     return CSV_TO_ENUM_MAPPING.get(csv_value, Domain.MEDICAL)
 
 # =============================================================================
@@ -84,7 +87,7 @@ class ScoringResults:
     """
     6-dimensional assessment results for research analysis.
     
-    Academic Purpose: Structured storage of all scoring dimensions
+    Purpose: Structured storage of all scoring dimensions
     for statistical analysis and educational feedback generation.
     """
     
@@ -131,7 +134,7 @@ class UserResponse:
     """
     Individual stage response with comprehensive metadata for research analysis.
     
-    Academic Purpose: Captures complete interaction data for each experimental
+    Purpose: Captures complete interaction data for each experimental
     stage, enabling longitudinal analysis of learning progression and AI dependency patterns.
     """
     
@@ -169,7 +172,7 @@ class ScenarioMetadata:
     """
     Comprehensive scenario information for research tracking.
     
-    Academic Purpose: Stores complete scenario context for experimental
+    Purpose: Stores complete scenario context for experimental
     validity and enables bias-blind protocol maintenance.
     """
     
@@ -193,7 +196,6 @@ class ScenarioMetadata:
     
     # Research metadata
     cognitive_load_level: str
-    ai_appropriateness: str
     bias_learning_objective: str
     rubric_focus: str
     llm_feedback: Optional[str] = None
@@ -204,7 +206,7 @@ class SessionAnalytics:
     """
     Comprehensive session analytics for research analysis.
     
-    Academic Purpose: Provides temporal and behavioral analysis data
+    Purpose: Provides temporal and behavioral analysis data
     for understanding learning patterns and AI interaction effects.
     """
     
@@ -231,14 +233,14 @@ class SessionAnalytics:
     # Completion metrics
     all_stages_completed: bool
     completion_rate: float
-    session_quality: str  # 'excellent', 'good', 'acceptable', 'poor'
+    session_quality: str 
 
 @dataclass
 class ExperimentalSession:
     """
     Complete experimental session for 2×2×3 factorial design research.
     
-    Academic Purpose: Primary data structure for statistical analysis,
+    Purpose: Primary data structure for statistical analysis,
     containing all variables and measurements for hypothesis testing.
     
     Research Design:
@@ -325,12 +327,12 @@ class ExperimentalSession:
         guidance_usage = sum(1 for r in self.stage_responses if r.guidance_requested)
         
         self.quality_flags.update({
-            'sufficient_engagement': avg_words >= 20,
+            'sufficient_engagement': avg_words >= QUALITY_THRESHOLDS.get("minimum_words_per_stage", 15),
             'demonstrates_progression': len(self.stage_responses) >= 2,
-            'natural_timing': self.session_duration_minutes >= 5,
+            'natural_timing': self.session_duration_minutes >= QUALITY_THRESHOLDS.get("minimum_session_duration_minutes", 5),
             'balanced_ai_usage': 0 < guidance_usage < len(self.stage_responses) if self.ai_assistance_enabled else True,
-            'high_quality_responses': all(r.word_count >= 10 for r in self.stage_responses),
-            'research_ready': self.is_completed and total_words >= 100
+            'high_quality_responses': all(r.word_count >= QUALITY_THRESHOLDS.get("minimum_response_length", 10) for r in self.stage_responses),
+            'research_ready': self.is_completed and total_words >= QUALITY_THRESHOLDS.get("minimum_response_length", 10) * 10  
         })
     
     def calculate_analytics(self) -> SessionAnalytics:
@@ -443,7 +445,15 @@ class ExperimentalSession:
             return 'acceptable'
         else:
             return 'poor'
-    
+        
+    def _scores_to_dict(self, scores):
+        """Convert ScoringResults object to a JSON-safe dict"""
+        d = scores.__dict__.copy()
+        ts = d.get('assessment_timestamp')
+        if isinstance(ts, datetime):
+            d['assessment_timestamp'] = ts.isoformat()
+        return d
+
     def export_for_analysis(self) -> Dict[str, Any]:
         """Export session data for statistical analysis"""
         # Ensure analytics are calculated
@@ -474,7 +484,7 @@ class ExperimentalSession:
                     'character_count': r.character_count,
                     'response_time_seconds': r.response_time_seconds,
                     'guidance_requested': r.guidance_requested,
-                    'scores': r.scores.__dict__ if r.scores else None
+                    'scores': self._scores_to_dict(r.scores) if r.scores else None
                 }
                 for r in self.stage_responses
             ],
@@ -500,7 +510,7 @@ def create_experimental_session(
     """
     Factory function to create properly initialized experimental session.
     
-    Academic Purpose: Ensures consistent session creation with proper
+    Purpose: Ensures consistent session creation with proper
     type validation and experimental integrity.
     """
     
@@ -516,8 +526,8 @@ def create_experimental_session(
     scenario = ScenarioMetadata(
         scenario_id=scenario_data['scenario_id'],
         title=scenario_data['title'],
-        bias_type=map_csv_bias_type(bias_type_str),  # FIXED: Use mapping function
-        domain=map_csv_domain(domain_str),          # FIXED: Use mapping function
+        bias_type=map_csv_bias_type(bias_type_str),
+        domain=map_csv_domain(domain_str),        
         scenario_text=scenario_data['scenario_text'],
         primary_prompt=scenario_data['primary_prompt'],
         follow_up_1=scenario_data['follow_up_1'],
@@ -528,7 +538,6 @@ def create_experimental_session(
         ideal_answer_2=scenario_data['ideal_answer_2'],
         ideal_answer_3=scenario_data['ideal_answer_3'],
         cognitive_load_level=scenario_data['cognitive_load_level'],
-        ai_appropriateness=scenario_data['ai_appropriateness'],
         bias_learning_objective=scenario_data['bias_learning_objective'],
         rubric_focus=scenario_data['rubric_focus'],
         llm_feedback=scenario_data.get('llm_feedback'),
@@ -555,25 +564,25 @@ def validate_session_data(session: ExperimentalSession) -> Dict[str, bool]:
     
     validations = {
         'valid_experimental_design': (
-            session.user_expertise in UserExpertise and
+            isinstance(session.user_expertise, UserExpertise) and
             isinstance(session.ai_assistance_enabled, bool) and
-            session.bias_type in BiasType
+            isinstance(session.bias_type, BiasType)
         ),
         'sufficient_responses': len(session.stage_responses) >= 2,
         'complete_session': session.is_completed,
         'adequate_engagement': (
-            session.analytics.overall_engagement_score > 0.3 
+            session.analytics.overall_engagement_score > QUALITY_THRESHOLDS.get("engagement_threshold", 0.3)
             if session.analytics else False
         ),
-        'natural_timing': session.session_duration_minutes >= 2,
+        'natural_timing': session.session_duration_minutes >= QUALITY_THRESHOLDS.get("minimum_session_duration_minutes", 5),
         'quality_responses': all(
-            r.word_count >= 5 for r in session.stage_responses
+            r.word_count >= QUALITY_THRESHOLDS.get("minimum_words_per_stage", 15) for r in session.stage_responses
         ) if session.stage_responses else False,
         'research_ready': (
             session.is_completed and
             len(session.stage_responses) == 4 and
-            sum(r.word_count for r in session.stage_responses) >= 50
+            sum(r.word_count for r in session.stage_responses) >= QUALITY_THRESHOLDS.get("minimum_response_length", 10) * 4
         )
     }
-    
+
     return validations
