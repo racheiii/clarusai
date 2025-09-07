@@ -121,7 +121,7 @@ How effectively do participants (or simulated personas) apply bias mitigation st
 
 ---
 
-## Marker Instructions
+## Reader Instructions
 
 To replicate the core results presented in the dissertation:
 

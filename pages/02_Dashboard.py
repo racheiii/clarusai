@@ -37,6 +37,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import html
+
 # Plotting (optional; guarded)
 try:
     import plotly.express as px
@@ -70,6 +72,25 @@ except Exception:
     except Exception:  
         SimulatedUserGenerator = None  
         SIMULATION_AVAILABLE = False
+
+_TOOLTIP_CSS = """
+<style>
+.help-icon {
+  display:inline-block; margin-left:6px; cursor:help;
+  color: var(--text-color, #6b7280); text-decoration:none;
+  border-bottom:1px dotted rgba(0,0,0,0.25);
+}
+.help-icon:hover { color:#111827; }
+</style>
+"""
+# Inject CSS only once per session
+if not st.session_state.get("_tooltip_css_injected", False):
+    st.markdown(_TOOLTIP_CSS, unsafe_allow_html=True)
+    st.session_state["_tooltip_css_injected"] = True
+
+def help_icon(text: str) -> str:
+    """Returns a small inline ⓘ with a native title tooltip."""
+    return f'<span class="help-icon" title="{html.escape(text)}">ⓘ</span>'
 
 # ================================
 # CONFIGURATION & CONSTANTS
@@ -145,7 +166,6 @@ def _score_stage(response_text: str, ideal_answer: str, scenario: Dict[str, Any]
             scenario=scenario or {},
         )
     except Exception as e:
-        # Return a structured error; downstream flattening is defensive
         return {"error": f"scoring_failed: {e}"}
 
 
@@ -164,7 +184,6 @@ def load_simulation_dataset(simulation_folder: str) -> Optional[pd.DataFrame]:
         coerced safely; missing values are handled gracefully.
     """
     try:
-        # Resolve the dataset folder using a simple, ordered fallback strategy
         candidates = [
             EXPORTS_DIR / simulation_folder,                         # if EXPORTS_DIR == .../simulated_datasets
             (EXPORTS_DIR / "simulated_datasets" / simulation_folder) # if EXPORTS_DIR == .../exports
@@ -602,48 +621,67 @@ def analyze_research_questions(df: pd.DataFrame) -> Dict[str, Any]:
 # VISUALISATIONS (PLOTLY)
 # ================================
 
-def fig_factorial(df: pd.DataFrame):
-    """2×2×3 factorial bar panels (RQ labels on titles)."""
-    if not PLOTTING_AVAILABLE or go is None or make_subplots is None:
+def fig_rq1_grouped(df: pd.DataFrame):
+    """
+    RQ1 visual: Novice vs Expert × AI vs No-AI, faceted by metric.
+    Shows group means for:
+      - overall_quality_score (primary RQ1)
+      - semantic_similarity (dependency signal)
+      - bias_recognition_count (secondary RQ1)
+    """
+    if not PLOTTING_AVAILABLE or px is None:
         return None
     try:
-        agg = summarize_factorial(df)["table"]
-        if agg.empty:
-            return None
-        fig = make_subplots(
-            rows=2,
-            cols=2,
-            subplot_titles=(
-                "Overall Quality (RQ1)",
-                "Originality (RQ2 context)",
-                "Bias Recognition (RQ1)",
-                "Guidance Usage",
-            ),
-        )
-        agg["cond"] = agg["user_expertise"].astype(str) + " | AI=" + agg["ai_assistance_enabled"].astype(str)
-        for i, metric in enumerate(["overall_quality_score", "originality_score", "bias_recognition_count", "guidance_requested"], start=1):
-            row, col = (1 if i <= 2 else 2), (1 if i in [1, 3] else 2)
-            for b in agg["bias_type"].unique():
-                sub = agg[agg["bias_type"] == b]
-                fig.add_trace(
-                    go.Bar(
-                        x=sub["cond"],
-                        y=sub[metric],
-                        name=str(b),
-                        showlegend=(i == 1),
-                    ),
-                    row=row,
-                    col=col,
-                )
-        fig.update_layout(
-            height=640,
-            title_text="Factorial Results across Bias Types",
+        cols = ["user_expertise", "ai_assistance_enabled",
+                "overall_quality_score", "semantic_similarity", "bias_recognition_count"]
+        d = df[cols].copy()
+
+        # Clean typing & ordering
+        d["ai_assistance_enabled"] = d["ai_assistance_enabled"].astype(bool)
+        d["user_expertise"] = pd.Categorical(d["user_expertise"],
+                                             categories=["novice", "expert"],
+                                             ordered=True)
+
+        # Group means (session-stage level)
+        g = (d.groupby(["user_expertise", "ai_assistance_enabled"], observed=False)
+               .agg(overall_quality_score=("overall_quality_score", "mean"),
+                    semantic_similarity=("semantic_similarity", "mean"),
+                    bias_recognition_count=("bias_recognition_count", "mean"))
+               .reset_index())
+
+        # Long form for faceting
+        g_long = g.melt(id_vars=["user_expertise", "ai_assistance_enabled"],
+                        value_vars=["overall_quality_score", "semantic_similarity", "bias_recognition_count"],
+                        var_name="metric", value_name="value")
+
+        # Nice labels
+        metric_labels = {
+            "overall_quality_score": "Overall Quality (RQ1)",
+            "semantic_similarity": "Similarity (dependency)",
+            "bias_recognition_count": "Bias Recognition (RQ1)"
+        }
+        g_long["metric"] = g_long["metric"].map(metric_labels)
+
+        label_map = {True: "AI", False: "No-AI"}
+        g_long["AI"] = g_long["ai_assistance_enabled"].map(label_map)
+
+        fig = px.bar(
+            g_long,
+            x="user_expertise",
+            y="value",
+            color="AI",
             barmode="group",
-            legend_traceorder="grouped",
+            facet_col="metric",
+            category_orders={"user_expertise": ["novice", "expert"],
+                             "AI": ["AI", "No-AI"],
+                             "metric": list(metric_labels.values())},
+            title="RQ1: Group Means by Expertise × AI"
         )
+        fig.update_yaxes(matches=None, showgrid=True)
+        fig.update_layout(height=450, legend_title=None, bargap=0.25)
         return fig
-    except Exception as e: 
-        st.error(f"Error building factorial figure: {e}")
+    except Exception as e:
+        st.error(f"Error building RQ1 grouped figure: {e}")
         return None
 
 def fig_parroting_scatter(df: pd.DataFrame):
@@ -831,19 +869,44 @@ def tab_rq1_stats() -> None:
     q = rq1.get("overall_quality_score", {})
     s = rq1.get("semantic_similarity", {})
     b = rq1.get("bias_recognition_count", {})
-    m1.metric("Quality Δ (AI−NoAI)", f"{q.get('diff', 0):.3f}")
-    m2.metric("Similarity Δ (AI−NoAI)", f"{s.get('diff', 0):.3f}")
-    m3.metric("Bias Rec Δ (AI−NoAI)", f"{b.get('diff', 0):.3f}")
+
+    with m1:
+        st.markdown(
+            f"**Quality Δ (AI−NoAI)** {help_icon('Mean difference in Overall Quality Score between AI and No-AI conditions. Positive = AI higher. Adjusted for Holm at the test level below.')}",
+            unsafe_allow_html=True,
+        )
+        st.metric(label="Quality Δ (AI−NoAI)", value=f"{q.get('diff', 0):.3f}", label_visibility="collapsed")
+
+    with m2:
+        st.markdown(
+            f"**Similarity Δ (AI−NoAI)** {help_icon('Mean difference in semantic similarity to the ideal answer. Positive = more mimicry/overlap in AI. Used as a dependency signal for RQ2.')}",
+            unsafe_allow_html=True,
+        )
+        st.metric(label="Similarity Δ (AI−NoAI)", value=f"{s.get('diff', 0):.3f}", label_visibility="collapsed")
+
+    with m3:
+        st.markdown(
+            f"**Bias Rec Δ (AI−NoAI)** {help_icon('Mean difference in bias-recognition markers. Positive = AI helped participants name/flag the bias more often.')}",
+            unsafe_allow_html=True,
+        )
+        st.metric(label="Bias Rec Δ (AI−NoAI)", value=f"{b.get('diff', 0):.3f}", label_visibility="collapsed")
 
     def show_test_block(title: str, res: Dict[str, Any]) -> None:
-        st.subheader(title)
+        st.markdown(
+            f"### {title} {help_icon('Welch t-test between AI and No-AI at the response level. '
+                                     'p (raw) is unadjusted; p (Holm) applies Holm–Bonferroni across the 3 tests in RQ1. '
+                                     'Cohen d: effect size (0.2 small, 0.5 medium, 0.8 large).')}",
+            unsafe_allow_html=True,
+        )
+        st.divider()
         if res:
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("AI Mean", f"{res.get('mean_ai', 0):.3f}")
-            c2.metric("No‑AI Mean", f"{res.get('mean_no_ai', 0):.3f}")
+            c2.metric("No-AI Mean", f"{res.get('mean_no_ai', 0):.3f}")
             c3.metric("p (raw)", f"{res.get('p_value', 1):.4f}")
             c4.metric("p (Holm)", f"{res.get('p_value_adj', res.get('p_value', 1)):.4f}")
             c5.metric("Cohen d", f"{res.get('effect_size_d', 0):.2f}")
+
             if res.get("significant_adj", False):
                 st.success("✅ Significant after Holm–Bonferroni (α=0.05)")
             elif res.get("significant", False):
@@ -856,10 +919,9 @@ def tab_rq1_stats() -> None:
     show_test_block("Bias Recognition Count", b)
 
     if PLOTTING_AVAILABLE:
-        fig = fig_factorial(df)
+        fig = fig_rq1_grouped(df)
         if fig:
             st.plotly_chart(fig, use_container_width=True)
-
 
 def tab_rq2_parroting() -> None:
     """Tab 2 — RQ2: Parroting vs Reasoning analysis."""
@@ -875,6 +937,18 @@ def tab_rq2_parroting() -> None:
     if "error" in rq2:
         st.error(rq2["error"]) 
         return
+
+    st.caption(
+        "Similarity–Originality scatter " +
+        help_icon("Each point is a response. Higher similarity suggests dependency on the ideal. "
+                  "Higher originality indicates novel content beyond the ideal. Colour shows AI condition; "
+                  "symbols are bias types.")
+        + "  |  "
+        "Mimicry Risk bar "
+        + help_icon("Proportion of responses above a similarity threshold (mean + "
+                    f"{MIMICRY_SD_MULTIPLIER}σ). Higher bars = more parroting risk.")
+        , unsafe_allow_html=True
+    )
 
     c1, c2 = st.columns(2)
     corr_val = rq2.get("overall_correlation_sim_vs_org", 0.0)
@@ -950,9 +1024,26 @@ def tab_rq3_transfer() -> None:
         return
 
     a, b, c = st.columns(3)
-    a.metric("ΔTransfer (AI)", f"{rq3.get('delta_mean_ai', 0):.3f}")
-    b.metric("ΔTransfer (No‑AI)", f"{rq3.get('delta_mean_no_ai', 0):.3f}")
-    c.metric("p‑value", f"{rq3.get('p_value', 1):.4f}")
+    with a:
+        st.markdown(
+            f"**ΔTransfer (AI)** {help_icon('Mean change in Transfer count from Stage 2→3 under AI. Positive means more explicit Transfer lines after mitigation.')}",
+            unsafe_allow_html=True
+        )
+        st.metric(label="ΔTransfer (AI)", value=f"{rq3.get('delta_mean_ai', 0):.3f}", label_visibility="collapsed")
+    with b:
+        st.markdown(
+            f"**ΔTransfer (No-AI)** {help_icon('Mean change in Transfer count from Stage 2→3 without AI.')}",
+            unsafe_allow_html=True
+        )
+        st.metric(label="ΔTransfer (No-AI)", value=f"{rq3.get('delta_mean_no_ai', 0):.3f}", label_visibility="collapsed")
+    with c:
+        st.markdown(
+            f"**p-value** {help_icon('Welch t-test on ΔTransfer between AI and No-AI. '
+                                    'Banner below shows significance at α=0.05.')}",
+            unsafe_allow_html=True
+        )
+        st.metric(label="p-value", value=f"{rq3.get('p_value', 1):.4f}", label_visibility="collapsed")
+
     if rq3.get("significant"):
         st.success("✅ Statistically significant (α=0.05)")
     else:
@@ -970,7 +1061,12 @@ def tab_rq3_transfer() -> None:
         ln = fig_transfer_lines(df)
         if ln:
             st.plotly_chart(ln, use_container_width=True)
-
+            st.caption(
+                "Transfer lines " +
+                help_icon("Counts of explicit 'Transfer:' markers at Stage 2 and Stage 3. "
+                          "Colour = AI condition; line dash = domain.") ,
+                unsafe_allow_html=True
+            )
 
 def tab_exports() -> None:
     """Tab 4 — Research exports (CSV/JSON + summary JSON)."""

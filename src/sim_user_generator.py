@@ -117,6 +117,8 @@ Style rules:
 - Keep answers concise (bullets or short paragraphs).
 - Include exactly ONE explicit “bias check” sentence.
 - Calibrate confidence with hedges (“likely”, “uncertain”, “provisionally”).
+- If an 'AI hint' is provided, refer to it directly unless it conflicts with obvious facts.
+- Include exactly ONE explicit line starting with 'Bias check:'.
 """.strip(),
 
     "expert": """
@@ -135,6 +137,8 @@ Style rules:
 - Structure as “Assessment: … / Reasoning: … / Plan: …” (adapt labels if needed).
 - Include exactly ONE counter-bias step (e.g., alternative interpretation).
 - Provide a justified confidence statement (“moderate confidence because …”).
+- If an 'AI hint' is provided, cross-check it; accept only with justification or offer an alternative.
+- Include exactly ONE explicit line starting with 'Counter-bias:' and a confidence line starting with 'Confidence:'.
 """.strip(),
 }
 
@@ -253,7 +257,8 @@ class SimulatedUserGenerator:
         stage_name: str,
         stage_prompt: str,
         ai_assistance: bool,
-        length_hint: str = ""
+        length_hint: str = "",
+        ai_hint: str = "",
     ) -> str:
         """Compose a domain-agnostic persona prompt with behavioural constraints."""
         persona_block = PERSONA_PRIMERS[expertise_key]
@@ -283,11 +288,71 @@ class SimulatedUserGenerator:
             f"{domain_adapter}\n"
             f"Scenario:\n{scenario_text}\n\n"
             f"Task ({stage_name}):\n{stage_prompt}\n\n"
-            f"{ai_note}\n\n"
-            f"{output_rules}"
-            f"{length_hint}"
+            + (f"{ai_note}\n{ai_hint}\n\n" if ai_assistance and ai_hint else f"{ai_note}\n\n")
+            + f"{output_rules}"
+            + f"{length_hint}"
         )
-        
+
+    def _make_ai_hint(
+        self,
+        scenario: Dict[str, Any],
+        stage: int,
+        hint_tokens: Tuple[int, int] = (6, 12),   # dial 1: informativeness
+        mask_ratio: float = 0.20                    # dial 2: noise (0.0 – 0.5)
+    ) -> str:
+        """Derive a lightweight, noisy hint from the ideal answer for this stage."""
+        ideal_fields = ["ideal_primary_answer", "ideal_answer_1", "ideal_answer_2", "ideal_answer_3"]
+        ideal = (scenario.get(ideal_fields[stage], "") or "").strip()
+        if not ideal:
+            return ""
+
+        import re, random
+        rnd = random.Random(int(self._rng.integers(0, 2**31 - 1)))
+
+        # Extract alphanumeric-ish tokens, keep content words
+        toks = re.findall(r"[A-Za-z][A-Za-z\-]+", ideal)
+        if len(toks) < 6:
+            return ""
+
+        # Deduplicate while preserving order to keep some coherence
+        seen = set()
+        content = []
+        STOP = {"the","a","an","and","or","but","to","of","for","in","on","at","by","with","from","that","this","these","those","is","are","be"}
+        for t in toks:
+            tl = t.lower()
+            if tl in STOP or tl in seen:
+                continue
+            seen.add(tl)
+            content.append(t)
+
+        if not content:
+            content = toks[:]  # fallback to original tokens
+
+        # Shuffle to avoid verbatim leakage, then keep a slice sized by hint_tokens
+        rnd.shuffle(content)
+        lo, hi = hint_tokens
+        k = max(lo, min(hi, max(6, len(content)//2)))
+        kept = content[:k]
+
+        # Apply masking noise to a subset of tokens
+        def mask_token(w: str) -> str:
+            if len(w) <= 3:
+                return w
+            # mask inner characters to keep a readable silhouette
+            inner = max(1, int(len(w) * 0.6))
+            return w[0] + "•" * inner + w[-1]
+
+        if 0.0 < mask_ratio <= 0.6:
+            num_mask = int(len(kept) * mask_ratio)
+            idxs = list(range(len(kept)))
+            rnd.shuffle(idxs)
+            for i in idxs[:num_mask]:
+                kept[i] = mask_token(kept[i])
+
+        hint = " ".join(kept)
+        return f"AI hint (noisy): {hint}"
+
+   
     # ----- Response generation -----
     def generate_llama3_response(
         self,
@@ -301,7 +366,7 @@ class SimulatedUserGenerator:
         Returns:
             (response_text, response_time_seconds)
         """
-        from src.llm_utils import generate_ollama_response  # lazy import
+        from src.llm_utils import generate_ollama_response
 
         stage_prompts = ["primary_prompt", "follow_up_1", "follow_up_2", "follow_up_3"]
         stage_names = ["Primary Analysis", "Cognitive Factors", "Mitigation Strategies", "Transfer Learning"]
@@ -318,6 +383,8 @@ class SimulatedUserGenerator:
         if self.target_words:
             length_hint = f"\n\nAim for approximately {self.target_words} words (±20%)."
 
+        ai_hint = self._make_ai_hint(scenario, stage) if ai_assistance else ""
+
         full_prompt = self._build_persona_prompt(
             expertise_key=expertise_key,
             domain=str(domain),
@@ -325,10 +392,18 @@ class SimulatedUserGenerator:
             stage_name=stage_name,
             stage_prompt=stage_prompt,
             ai_assistance=ai_assistance,
-            length_hint=length_hint
+            length_hint=length_hint,
+            ai_hint=ai_hint
         )
 
-        # Stage 4 transfer requirement (index 3)
+        # Stage 3 (index 2)
+        if stage == 2:
+            full_prompt += (
+                "\n\nPlease include one line starting with 'Transfer:' "
+                "that generalises your mitigation to another high-stakes domain."
+            )
+
+        # Stage 4 (index 3)
         if stage == 3:
             full_prompt += (
                 "\n\nTransfer requirement:\n"
@@ -355,9 +430,8 @@ class SimulatedUserGenerator:
             return False
         stage_complexity = {0: 0.3, 1: 0.6, 2: 0.8, 3: 0.5}
         weight = stage_complexity.get(stage, 0.5)
-        base = 0.7 if expertise == UserExpertise.NOVICE else 0.4
+        base = 0.8 if expertise == UserExpertise.NOVICE else 0.3
         prob = max(0.0, min(1.0, base * weight))
-        # Use class RNG for reproducibility under seeding
         return float(self._rng.random()) < prob
 
     def _assess_session_quality(self, stages: List[Dict[str, Any]]) -> str:
@@ -370,7 +444,6 @@ class SimulatedUserGenerator:
             return "moderate"
         return "low"
 
-    # ----- Build one session -----
     def create_session_data(
         self,
         session_id: str,

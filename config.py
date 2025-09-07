@@ -45,16 +45,16 @@ STATISTICAL_CONFIG = {
     "multiple_comparisons_method": "holm_bonferroni",
 }
 
-# Scoring Algorithm Thresholds
 SCORING_THRESHOLDS = {
     "semantic_similarity_high": 0.75,
     "semantic_similarity_medium": 0.5,
     "originality_low": 0.25,
     "originality_high": 0.5,
-    "bias_recognition_min_terms": 2
+    "bias_recognition_min_terms": 1
 }
 
-# Bias Recognition Keywords: keyword sets for detecting bias recognition in user responses across different cognitive bias types
+# Bias Recognition Keywords: keyword sets for detecting bias recognition 
+# in user responses across different cognitive bias types
 BIAS_KEYWORDS = {
     # Primary keys matching CSV format
     "Confirmation": [
@@ -141,6 +141,11 @@ BIAS_KEYWORDS = {
         "systematic analysis", "broader sample", "representative data"
     ]
 }
+
+# ---- Canonicalise alias keys so CSV and enum forms are identical ----
+BIAS_KEYWORDS["confirmation_bias"] = BIAS_KEYWORDS["Confirmation"]
+BIAS_KEYWORDS["anchoring_bias"] = BIAS_KEYWORDS["Anchoring"]
+BIAS_KEYWORDS["availability_heuristic"] = BIAS_KEYWORDS["Availability"]
 
 # Semantic bias cue patterns used to detect implicit bias recognition in responses
 SEMANTIC_BIAS_CUES = {
@@ -417,11 +422,11 @@ if __name__ == "__main__":
 
 # Research-Based Scoring Weights for Overall Quality
 WEIGHTS = {
-    "independence": 0.30,
-    "bias_awareness": 0.25,
-    "originality": 0.20,
-    "strategy": 0.15,
-    "transfer": 0.05,
+    "independence": 0.35,
+    "bias_awareness": 0.15,
+    "originality": 0.15,
+    "strategy": 0.20,
+    "transfer": 0.10,
     "metacognition": 0.05
 }
 

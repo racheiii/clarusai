@@ -87,7 +87,7 @@ class ScoringResults:
     """
     6-dimensional assessment results for research analysis.
     
-    Academic Purpose: Structured storage of all scoring dimensions
+    Purpose: Structured storage of all scoring dimensions
     for statistical analysis and educational feedback generation.
     """
     
@@ -134,7 +134,7 @@ class UserResponse:
     """
     Individual stage response with comprehensive metadata for research analysis.
     
-    Academic Purpose: Captures complete interaction data for each experimental
+    Purpose: Captures complete interaction data for each experimental
     stage, enabling longitudinal analysis of learning progression and AI dependency patterns.
     """
     
@@ -172,7 +172,7 @@ class ScenarioMetadata:
     """
     Comprehensive scenario information for research tracking.
     
-    Academic Purpose: Stores complete scenario context for experimental
+    Purpose: Stores complete scenario context for experimental
     validity and enables bias-blind protocol maintenance.
     """
     
@@ -206,7 +206,7 @@ class SessionAnalytics:
     """
     Comprehensive session analytics for research analysis.
     
-    Academic Purpose: Provides temporal and behavioral analysis data
+    Purpose: Provides temporal and behavioral analysis data
     for understanding learning patterns and AI interaction effects.
     """
     
@@ -240,7 +240,7 @@ class ExperimentalSession:
     """
     Complete experimental session for 2×2×3 factorial design research.
     
-    Academic Purpose: Primary data structure for statistical analysis,
+    Purpose: Primary data structure for statistical analysis,
     containing all variables and measurements for hypothesis testing.
     
     Research Design:
@@ -332,7 +332,7 @@ class ExperimentalSession:
             'natural_timing': self.session_duration_minutes >= QUALITY_THRESHOLDS.get("minimum_session_duration_minutes", 5),
             'balanced_ai_usage': 0 < guidance_usage < len(self.stage_responses) if self.ai_assistance_enabled else True,
             'high_quality_responses': all(r.word_count >= QUALITY_THRESHOLDS.get("minimum_response_length", 10) for r in self.stage_responses),
-            'research_ready': self.is_completed and total_words >= QUALITY_THRESHOLDS.get("minimum_response_length", 10) * 10  # adjust if you prefer 100 exactly
+            'research_ready': self.is_completed and total_words >= QUALITY_THRESHOLDS.get("minimum_response_length", 10) * 10  
         })
     
     def calculate_analytics(self) -> SessionAnalytics:
@@ -510,7 +510,7 @@ def create_experimental_session(
     """
     Factory function to create properly initialized experimental session.
     
-    Academic Purpose: Ensures consistent session creation with proper
+    Purpose: Ensures consistent session creation with proper
     type validation and experimental integrity.
     """
     

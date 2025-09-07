@@ -28,6 +28,63 @@ from sklearn.metrics.pairwise import cosine_similarity
 # Local
 import config
 
+import re
+
+BIAS_MARKERS = [
+    r"\bBias check:\b", r"\bCounter-bias:\b",
+    r"\banchoring\b", r"\bavailability\b", r"\bconfirmation\b"
+]
+CONFIDENCE_MARKERS = [r"^Confidence:\s*", r"\bconfidence\b"]
+TRANSFER_MARKERS = [r"^Transfer:\s*", r"\bapply (?:this|these) (?:principle|principles)\b", r"\bin other domains\b"]
+
+def _count_regex_any(text: str, patterns: list[str]) -> int:
+    t = text.lower()
+    return sum(1 for p in patterns if re.search(p, t, flags=re.MULTILINE))
+
+def detect_bias_recognition(response: str, bias_type: Any) -> Tuple[int, str]:
+    """
+    Unified detector that combines:
+      (a) explicit line markers: 'Bias check:' / 'Counter-bias:'  (strong signal)
+      (b) config-driven keywords and semantic cues for the scenario's bias_type
+    Returns: (count, tag) where tag ∈ {'strong','partial','none','invalid'}
+    """
+    if not validate_response(response):
+        return 0, "invalid"
+
+    resp_lc = response.lower()
+
+    if _count_regex_any(resp_lc, [r"\bBias check:\b", r"\bCounter-bias:\b"]) > 0:
+        return 2, "strong"  
+
+    bias_raw = safe_enum_str(bias_type)
+    try:
+        keywords = config.get_bias_keywords(bias_raw)
+    except Exception:
+        keywords = []
+    cue_key = bias_raw.lower().replace("_bias", "").replace("_heuristic", "")
+    semantic_patterns = getattr(config, "SEMANTIC_BIAS_CUES", {}).get(cue_key, [])
+
+    hits = set()
+    for kw in keywords:
+        if kw and kw.lower() in resp_lc:
+            hits.add(kw.lower())
+    for phrase in semantic_patterns:
+        p = phrase.lower()
+        if p and p in resp_lc:
+            hits.add(p)
+
+    total_hits = len(hits)
+    threshold = getattr(config, "SCORING_THRESHOLDS", {}).get("bias_recognition_min_terms", 1)
+
+    if total_hits >= threshold:
+        tag = "strong"
+    elif total_hits == 1:
+        tag = "partial"
+    else:
+        tag = "none"
+
+    return total_hits, tag
+
 def validate_response(response: str, min_length: int = 10) -> bool:
     """Basic sanity check for non-empty, minimally-long responses."""
     return isinstance(response, str) and len(response.strip()) >= min_length
@@ -44,7 +101,7 @@ def _collect_transfer_terms_from_config(domain_key: str) -> List[str]:
     """
     per_domain = cast(Dict[str, List[str]], getattr(config, "TRANSFER_TERMS", {}))
     general = cast(Sequence[str], getattr(config, "GENERAL_TRANSFER_TERMS", ()))
-    verbs = cast(Sequence[str], getattr(config, "TRANSFER_VERBS", ()))  # optional
+    verbs = cast(Sequence[str], getattr(config, "TRANSFER_VERBS", ()))
 
     ordered: List[str] = []
     ordered.extend(t.lower() for t in per_domain.get(domain_key, []))
@@ -59,7 +116,6 @@ def _collect_transfer_terms_from_config(domain_key: str) -> List[str]:
             unique.append(t)
     return unique
 
-# Load transformer model once (no external downloads here)
 try:
     model = SentenceTransformer("all-MiniLM-L6-v2")
     MODEL_LOADED = True
@@ -94,34 +150,6 @@ def calculate_semantic_similarity(response: str, ideal_answer: str) -> Tuple[flo
         tag = "low"
 
     return similarity, tag
-
-def detect_bias_recognition(response: str, bias_type: Any) -> Tuple[int, str]:
-    if not validate_response(response):
-        return 0, "invalid"
-
-    response_lc = response.lower()
-
-    bias_raw = safe_enum_str(bias_type)
-    keywords = config.get_bias_keywords(bias_raw)  # robust lookup via config
-    keyword_hits = [kw for kw in keywords if kw.lower() in response_lc]
-
-    # Normalise to simple cue key: "confirmation" | "anchoring" | "availability"
-    cue_key = bias_raw.lower().replace("_bias", "").replace("_heuristic", "")
-    semantic_patterns = config.SEMANTIC_BIAS_CUES.get(cue_key, [])
-    phrase_hits = [phrase for phrase in semantic_patterns if phrase.lower() in response_lc]
-
-    total_hits = len(set(keyword_hits + phrase_hits))
-
-    threshold = config.SCORING_THRESHOLDS.get("bias_recognition_min_terms", 2)
-
-    if total_hits >= threshold:
-        tag = "strong"
-    elif total_hits == 1:
-        tag = "partial"
-    else:
-        tag = "none"
-
-    return total_hits, tag
 
 def measure_originality(response: str, ideal_answer: str) -> Tuple[float, str]:
     """
@@ -177,7 +205,7 @@ def evaluate_transferability(response: str, original_domain: Any) -> Tuple[int, 
         return 0, "invalid"
 
     text = response.lower().strip()
-    domain_key = safe_enum_str(original_domain).lower()  # e.g., "medical", "military", "emergency"
+    domain_key = safe_enum_str(original_domain).lower()  
 
     terms = _collect_transfer_terms_from_config(domain_key)
     hits = [t for t in terms if t and t in text]
@@ -252,7 +280,6 @@ def calculate_comprehensive_scores(response: str, ideal_answer: str, scenario: D
         "domain_transferability": {"count": transfer_count, "tag": transfer_tag},
         "metacognitive_awareness": {"count": metacog_count, "tag": metacog_tag},
         "overall_quality_score": overall,
-        # New: standard, user-facing band for awareness
         "bias_awareness_level": map_bias_count_to_level(bias_count),
         "confidence_flags": {
             "low_effort": len(response.split()) < 10,
@@ -264,4 +291,3 @@ def calculate_comprehensive_scores(response: str, ideal_answer: str, scenario: D
             "model_loaded": MODEL_LOADED
         }
     }
-
