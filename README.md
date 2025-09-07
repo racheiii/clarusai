@@ -5,7 +5,7 @@ Beyond Surface Learning: Evaluating AI Literacy Through LLM-Supported Cognitive 
 **Author:** 
 Rachel Seah Yan Ting
 **Supervising Professor:** 
-Graham Roberts
+Dr. Graham Roberts
 **Institution:** 
 University College London (UCL) — MSc Computer Science  
 
@@ -54,7 +54,7 @@ A live demonstration mode is included for illustration but is not used in the ma
 
 1. **Clone the repository**
 ```bash
-git clone < xxx >
+git clone < https://github.com/racheiii/clarusai.git >
 cd clarusai
 ```
 
@@ -111,8 +111,8 @@ The analyses in the Dashboard directly address the three core research questions
 How does access to LLM assistance affect overall response quality in cognitive bias decision-making scenarios?  
 → Addressed in **Tab 1**: AI vs. Non-AI Performance.
 
-**RQ2 — Parroting vs. Reasoning**  
-To what extent do LLM-assisted responses exhibit parroting behaviour (high similarity to ideal answers but low originality) compared to unassisted responses?  
+**RQ2 — Mimicry vs. Reasoning**  
+To what extent do LLM-assisted responses exhibit mimicry behaviour (high similarity to ideal answers but low originality) compared to unassisted responses?  
 → Addressed in **Tab 2**: Parroting Detection.
 
 **RQ3 — Transfer Learning Across Domains**  
@@ -127,7 +127,7 @@ To replicate the core results presented in the dissertation:
 
 1. **Launch the Dashboard** (`streamlit run Home.py` → "Access Research Dashboard")  
 2. **Generate Dataset** in Tab 0 (or load an existing one under `exports/simulated_datasets/`).  
-3. **Review Analyses** in Tabs 1–3 for AI vs Non-AI performance, parroting detection, and transfer learning.  
+3. **Review Analyses** in Tabs 1–3 for AI vs Non-AI performance, mimicry detection, and transfer learning.  
 4. **Export Data** in Tab 4 for verification.  
 5. **Review Summary** in Tab 5 for a concise overview.  
 
@@ -141,3 +141,11 @@ The **Live Demo** is for demonstration only and does not influence the results.
 - Scoring is performed only in Dashboard mode for a clean separation between data generation and evaluation.  
 - All datasets are synthetic, avoiding the need for human subjects in the main study.  
 - Outputs are reproducible — every dataset run is timestamped.
+
+---
+
+## Submission Note
+
+This repository accompanies the MSc Computer Science dissertation  
+**“Beyond Surface Learning: Evaluating AI Literacy Through LLM-Supported Cognitive Bias Simulation”**  
+submitted to University College London on 8 September 2025.  
