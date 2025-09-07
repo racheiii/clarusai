@@ -69,7 +69,7 @@ class ScenariosPageController:
     """
     Main controller for the 4-stage experimental training interface.
     
-    Academic Purpose: Orchestrates the complete experimental protocol while
+    Purpose: Orchestrates the complete experimental protocol while
     maintaining clean separation of concerns and error handling.
     """
     
@@ -356,7 +356,7 @@ def main():
     """
     Main entry point for the 01_Scenarios.py page.
     
-    Academic Purpose: Provides clean entry point for the experimental
+    Purpose: Provides clean entry point for the experimental
     training interface with proper error boundaries.
     """
     

@@ -67,7 +67,7 @@ class DataCollector:
     """
     Comprehensive data collection system for experimental research.
     
-    Academic Purpose: Provides robust data collection with 6-dimensional
+    Purpose: Provides robust data collection with 6-dimensional
     scoring while maintaining research integrity and quality standards.
     """
     
@@ -84,7 +84,7 @@ class DataCollector:
         """
         Save stage response with comprehensive scoring and metadata.
         
-        Academic Purpose: Captures complete interaction data with 6-dimensional
+        Purpose: Captures complete interaction data with 6-dimensional
         scoring for research analysis while maintaining data integrity.
         
         Args:

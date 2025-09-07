@@ -87,7 +87,6 @@ def main():
             st.session_state.current_page = "dashboard"
             st.switch_page("pages/02_Dashboard.py")
     
-    # Academic footer
     render_academic_footer()
 
 if __name__ == "__main__":
